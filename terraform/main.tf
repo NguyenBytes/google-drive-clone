@@ -1,8 +1,8 @@
 resource "aws_s3_bucket" "files" {
-  bucket_prefix = "google-drive-clone-"
+  bucket = "google-drive-clone-app-bucket"
 
   tags = {
-    Name = "google-drive-clone-files"
+    Name = "google-drive-clone-app-bucket"
   }
 }
 
