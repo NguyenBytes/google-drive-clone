@@ -8,12 +8,12 @@ app.use(express.json({ limit: "25mb" }));
 app.use(router);
 
 const server = app.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
+	console.log(`Server listening on port ${port}`);
 });
 
 const shutdown = (signal: string) => {
-  console.log(`${signal} received; closing server`);
-  server.close(() => process.exit(0));
+	console.log(`${signal} received; closing server`);
+	server.close(() => process.exit(0));
 };
 
 process.on("SIGINT", () => shutdown("SIGINT"));
