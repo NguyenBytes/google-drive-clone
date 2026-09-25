@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useNavigate } from 'react-router'
-import { confirmSignUp, getCurrentUser, signIn, signOut, signUp } from '@aws-amplify/auth'
+import { confirmSignUp, getCurrentUser, signIn, signOut, signUp } from 'aws-amplify/auth'
 import { isAuthConfigured } from './auth'
 import './App.css'
 
