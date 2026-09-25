@@ -45,6 +45,12 @@ jobs:
       - name: Display AWS Role To Assume
         run: 'echo "AWS role to assume: ${{ vars.AWS_ROLE_TO_ASSUME }}"'
 
+      - name: Display GitHub OIDC Context
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Repository: ${{ github.repository }}"
+          echo "Ref: ${{ github.ref }}"
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v5
         with:

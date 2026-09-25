@@ -30,6 +30,7 @@ resource "aws_cognito_user_pool" "main" {
   }
 }
 
+#random cmment to set
 resource "aws_cognito_user_group" "users" {
   name         = "users"
   user_pool_id = aws_cognito_user_pool.main.id
