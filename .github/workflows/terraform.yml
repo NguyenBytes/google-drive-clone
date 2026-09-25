@@ -1,7 +1,9 @@
-name: Terraform
+name: Provision AWS Infrastructure
 
 on:
   pull_request:
+    branches:
+      - main
     paths:
       - "terraform/**"
       - ".github/workflows/terraform.yml"
@@ -25,27 +27,29 @@ env:
   TF_IN_AUTOMATION: "true"
 
 jobs:
-  terraform:
-    name: Plan or apply infrastructure
+  provision:
+    permissions:
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out repository
+      - name: Check Out Repository
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials through OIDC
-        uses: aws-actions/configure-aws-credentials@v5
-        with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
-
-      - name: Check AWS identity
-        run: aws sts get-caller-identity
-
-      - name: Set up Terraform
+      - name: Set Up Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.16.1
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS Caller Identity
+        run: aws sts get-caller-identity
 
       - name: Initialize Terraform
         working-directory: terraform
