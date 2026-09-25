@@ -1,0 +1,69 @@
+name: Terraform
+
+on:
+  pull_request:
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: terraform-production
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-west-2
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  terraform:
+    name: Plan or apply infrastructure
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+
+      - name: Check AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.1
+
+      - name: Initialize Terraform
+        working-directory: terraform
+        run: terraform init -input=false
+
+      - name: Check Terraform formatting
+        working-directory: terraform
+        run: terraform fmt -check -diff
+
+      - name: Validate Terraform configuration
+        working-directory: terraform
+        run: terraform validate -no-color
+
+      - name: Create Terraform plan
+        working-directory: terraform
+        run: terraform plan -input=false -no-color -out=tfplan
+
+      - name: Apply Terraform changes
+        if: github.event_name == 'push'
+        working-directory: terraform
+        run: terraform apply -input=false -no-color tfplan

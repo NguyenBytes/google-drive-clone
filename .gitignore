@@ -1,0 +1,51 @@
+# Dependencies and build output
+**/node_modules/
+**/dist/
+**/dist-ssr/
+**/build/
+**/coverage/
+.cache/
+.parcel-cache/
+.vite/
+
+# Environment files and local secrets. Keep documented templates in Git.
+.env
+.env.*
+!.env.example
+!**/.env.example
+*.pem
+*.key
+
+# Terraform working files, state, and locally generated plans.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+!**/*.tfvars.example
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+
+# Logs and runtime files
+logs/
+*.log
+*.pid
+*.pid.lock
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Operating-system and editor metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
