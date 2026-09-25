@@ -25,6 +25,9 @@ resource "aws_dynamodb_table" "files" {
 resource "aws_cognito_user_pool" "main" {
   name = "google-drive-clone-users"
 
+  # Cognito sends a confirmation code to the email supplied at sign-up.
+  auto_verified_attributes = ["email"]
+
   tags = {
     Name = "google-drive-clone-users"
   }
