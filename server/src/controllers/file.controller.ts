@@ -5,10 +5,12 @@ import {
 	PutObjectCommand,
 	S3Client,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { Request, Response } from "express";
 import type { FileUploadBody } from "../models/file.model.js";
 
 const s3 = new S3Client({ region: process.env.AWS_REGION ?? "us-west-2" });
+const PRESIGNED_URL_EXPIRES_IN = 900;
 const MAX_UPLOAD_BYTES = 18 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = new Set([
 	"jpg", "jpeg", "png", "gif", "webp", "bmp", "heic",
@@ -86,7 +88,11 @@ const upload = async (
 };
 
 export const listFiles = async (request: Request, response: Response): Promise<void> => {
-	const prefix = typeof request.query.prefix === "string" ? request.query.prefix : undefined;
+	const prefix = getNonEmptyString(request.query.prefix);
+	if (!prefix) {
+		response.status(400).json({ error: "A non-empty prefix query parameter is required" });
+		return;
+	}
 
 	try {
 		const result = await s3.send(
@@ -94,12 +100,23 @@ export const listFiles = async (request: Request, response: Response): Promise<v
 		);
 
 		response.json({
-			files: (result.Contents ?? []).map((file) => ({
-				key: file.Key,
-				size: file.Size,
-				lastModified: file.LastModified,
-				eTag: file.ETag,
-			})),
+			files: (result.Contents ?? []).filter((file) => !file.Key?.endsWith("/")).map((file) => {
+				const key = file.Key;
+				const name = key?.replace(/\/$/, "").split("/").pop();
+				return {
+					key,
+					name,
+					size: file.Size,
+					lastModified: file.LastModified
+						? `${new Intl.DateTimeFormat("en-US", {
+							dateStyle: "medium",
+							timeStyle: "short",
+							timeZone: "UTC",
+						}).format(file.LastModified)} UTC`
+						: undefined,
+					eTag: file.ETag,
+				};
+			}),
 		});
 	} catch (error) {
 		sendServiceError(response, error);
@@ -130,6 +147,28 @@ export const downloadFile = async (request: Request, response: Response): Promis
 		}
 		response.setHeader("Content-Disposition", `attachment; filename="${key.split("/").pop()}"`);
 		response.send(Buffer.from(await result.Body.transformToByteArray()));
+	} catch (error) {
+		sendServiceError(response, error);
+	}
+};
+
+export const getPresignedDownloadUrl = async (
+	request: Request,
+	response: Response,
+): Promise<void> => {
+	const key = getNonEmptyString(request.query.key);
+	if (!key) {
+		response.status(400).json({ error: "A non-empty key query parameter is required" });
+		return;
+	}
+
+	try {
+		const url = await getSignedUrl(
+			s3,
+			new GetObjectCommand({ Bucket: getBucket(), Key: key }),
+			{ expiresIn: PRESIGNED_URL_EXPIRES_IN },
+		);
+		response.json({ key, url, expiresIn: PRESIGNED_URL_EXPIRES_IN });
 	} catch (error) {
 		sendServiceError(response, error);
 	}

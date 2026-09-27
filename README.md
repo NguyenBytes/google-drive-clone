@@ -40,12 +40,16 @@ The server listens on port `3000` by default.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/health` | Health check. |
-| `GET` | `/files?prefix=…` | List S3 objects. |
-| `GET` | `/files/object?key=…` | Download one object. |
-| `POST` | `/files` | Upload an object; JSON body requires `key` and base64 `content`. |
-| `PUT` | `/files` | Replace an object using the same request body. |
-| `DELETE` | `/files?key=…` | Delete an object. |
+| `GET` | `/api/v1/health` | Health check. |
+| `GET` | `/api/v1/files?prefix=…` | List objects under the required prefix with `key`, `name`, and metadata. |
+| `GET` | `/api/v1/files/presigned-url?key=…` | Get a presigned download URL for one object (valid for 15 minutes). |
+| `GET` | `/api/v1/files/object?key=…` | Download one object. |
+| `POST` | `/api/v1/files` | Upload an object; JSON body requires `key` and base64 `content`. |
+| `PUT` | `/api/v1/files` | Replace an object using the same request body. |
+| `DELETE` | `/api/v1/files?key=…` | Delete an object. |
+
+The API root and health endpoint are available at `/api/v1/` and `/api/v1/health`.
+For local development, the API allows requests from `http://localhost:5173`. Set `CORS_ORIGIN` on the server to a comma-separated list of allowed frontend origins when using a different host or port.
 
 For uploads, `contentType` is optional. Example payload:
 
