@@ -55,7 +55,7 @@ function App() {
 						element={<LoginPage auth={auth} refreshAuth={refreshAuth} />}
 					/>
 					<Route element={<ProtectedRoute auth={auth} />}>
-						<Route path="dashboard" element={<Dashboard auth={auth} />} />
+						<Route path="dashboard" element={<Dashboard key={auth.username} auth={auth} />} />
 						<Route path="profile" element={<ProfilePage auth={auth} setAuth={setAuth} />} />
 					</Route>
 					<Route path="*" element={<Navigate replace to="/" />} />

@@ -19,11 +19,11 @@ export function SiteLayout({ auth, setAuth }: SiteLayoutProps) {
 	}
 
 	return (
-		<div className="flex min-h-dvh flex-col bg-base-200">
+		<div className="flex min-h-dvh min-w-0 max-w-full flex-col bg-base-200">
 			<header className="border-b border-base-300 bg-base-100 shadow-sm">
-			<div className="navbar mx-auto w-full px-4 md:w-2/3 md:px-6 xl:w-2/3">
+			<div className="navbar mx-auto w-full min-w-0 gap-2 px-4 md:w-2/3 md:px-6 xl:w-2/3">
 				<Link
-					className="btn btn-ghost gap-3 px-2 text-xl normal-case"
+					className="btn btn-ghost shrink-0 gap-3 px-2 text-xl normal-case"
 					to={auth.status === 'signedIn' ? '/dashboard' : '/'}
 				>
 					<img
@@ -37,7 +37,7 @@ export function SiteLayout({ auth, setAuth }: SiteLayoutProps) {
 				</Link>
 
 				{auth.status === 'signedIn' && (
-					<label className="input input-bordered mx-auto hidden w-full max-w-xl items-center gap-2 rounded-full bg-base-200 md:flex">
+					<label className="input input-bordered mx-auto hidden min-w-0 flex-1 max-w-xl items-center gap-2 rounded-full bg-base-200 md:flex">
 						<svg
 							aria-hidden="true"
 							className="h-4 w-4 opacity-60"
@@ -48,11 +48,11 @@ export function SiteLayout({ auth, setAuth }: SiteLayoutProps) {
 							<circle cx="11" cy="11" r="7" strokeWidth="2" />
 							<path d="m20 20-4-4" strokeWidth="2" />
 						</svg>
-						<input aria-label="Search Drivebox" placeholder="Search in Drivebox" type="search" />
+						<input className="min-w-0 w-full" aria-label="Search Drivebox" placeholder="Search in Drivebox" type="search" />
 					</label>
 				)}
 
-				<nav className="ml-auto flex gap-2" aria-label="Primary navigation">
+				<nav className="ml-auto flex shrink-0 gap-2" aria-label="Primary navigation">
 					{auth.status === 'signedIn' ? (
 						<details className="dropdown dropdown-end">
 							<summary
@@ -79,7 +79,7 @@ export function SiteLayout({ auth, setAuth }: SiteLayoutProps) {
 				</nav>
 			</div>
 			</header>
-			<main className="flex flex-1 flex-col">
+			<main className="flex min-w-0 flex-1 flex-col">
 				<Outlet />
 			</main>
 

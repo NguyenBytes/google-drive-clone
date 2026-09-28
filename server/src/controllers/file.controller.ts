@@ -6,6 +6,7 @@ import {
 	S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import type { _Object } from "@aws-sdk/client-s3";
 import type { Request, Response } from "express";
 import type { FileUploadBody } from "../models/file.model.js";
 
@@ -94,13 +95,69 @@ export const listFiles = async (request: Request, response: Response): Promise<v
 		return;
 	}
 
+	const pageSize = 10;
+	const page = request.query.page === undefined ? undefined : Number(request.query.page);
+	if (page !== undefined && (typeof request.query.page !== "string" || !Number.isSafeInteger(page) || page < 1)) {
+		response.status(400).json({ error: "page must be a positive integer" });
+		return;
+	}
+	const continuationToken = getNonEmptyString(request.query.continuationToken);
+	if (request.query.continuationToken !== undefined && !continuationToken) {
+		response.status(400).json({ error: "continuationToken must be a non-empty string" });
+		return;
+	}
+
 	try {
-		const result = await s3.send(
-			new ListObjectsV2Command({ Bucket: getBucket(), Prefix: prefix }),
-		);
+		const objects: _Object[] = [];
+		let nextContinuationToken = continuationToken;
+
+		// Token requests retain sequential navigation support.
+		if (page === undefined) {
+			do {
+				const result = await s3.send(new ListObjectsV2Command({
+					Bucket: getBucket(),
+					Prefix: prefix,
+					MaxKeys: pageSize - objects.length,
+					ContinuationToken: nextContinuationToken,
+				}));
+
+				objects.push(...(result.Contents ?? []).filter((file) => file.Key && !file.Key.endsWith("/")));
+				nextContinuationToken = result.IsTruncated ? result.NextContinuationToken : undefined;
+			} while (objects.length < pageSize && nextContinuationToken);
+		}
+
+		let totalItems = 0;
+		let countToken: string | undefined;
+
+		// S3 doesn't return a total count. Count metadata without retaining
+		// the entire listing or including directory marker objects.
+		do {
+			const result = await s3.send(new ListObjectsV2Command({
+				Bucket: getBucket(),
+				Prefix: prefix,
+				MaxKeys: 1000,
+				ContinuationToken: countToken,
+			}));
+
+			for (const file of result.Contents ?? []) {
+				if (!file.Key || file.Key.endsWith("/")) continue;
+
+				if (page !== undefined && totalItems >= (page - 1) * pageSize && objects.length < pageSize) {
+					objects.push(file);
+				}
+				totalItems++;
+			}
+			countToken = result.IsTruncated ? result.NextContinuationToken : undefined;
+		} while (countToken);
 
 		response.json({
-			files: (result.Contents ?? []).filter((file) => !file.Key?.endsWith("/")).map((file) => {
+			pageSize,
+			page,
+			totalItems,
+			totalPages: Math.ceil(totalItems / pageSize),
+			nextContinuationToken: nextContinuationToken ?? null,
+			hasMore: page === undefined ? Boolean(nextContinuationToken) : page < Math.ceil(totalItems / pageSize),
+			files: objects.map((file) => {
 				const key = file.Key;
 				const name = key?.replace(/\/$/, "").split("/").pop();
 				return {

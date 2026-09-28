@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { fetchUserAttributes } from 'aws-amplify/auth'
 import type { DriveFile, AuthState } from '../../types'
 import { FileActionsMenu } from '../ui/FileActionsMenu'
+import { FolderBreadcrumbs } from '../ui/FolderBreadcrumbs'
 
 const configuredApiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 const API_URL = (/^https?:\/\//i.test(configuredApiUrl)
@@ -34,6 +35,8 @@ export function Dashboard({ auth }: DashboardProps) {
 	const [loadingFiles, setLoadingFiles] = useState(true)
 	const [filesError, setFilesError] = useState('')
 	const [filesVersion, setFilesVersion] = useState(0)
+	const [page, setPage] = useState(1)
+	const [fileTotals, setFileTotals] = useState<{ totalItems: number; totalPages: number } | null>(null)
 	const [selectedFile, setSelectedFile] = useState<DriveFile | null>(null)
 	const [preview, setPreview] = useState<FilePreview | null>(null)
 	const [previewLoading, setPreviewLoading] = useState(false)
@@ -48,10 +51,12 @@ export function Dashboard({ auth }: DashboardProps) {
 
 	useEffect(() => {
 		let cancelled = false
+		const controller = new AbortController()
 
 		const loadFiles = async () => {
 			setLoadingFiles(true)
 			setFilesError('')
+			setFiles([])
 
 			try {
 				const attributes = await fetchUserAttributes()
@@ -61,7 +66,8 @@ export function Dashboard({ auth }: DashboardProps) {
 
 				const filesUrl = new URL(`${API_URL}/files`)
 				filesUrl.searchParams.set('prefix', `${email}/`)
-				const response = await fetch(filesUrl)
+				filesUrl.searchParams.set('page', String(page))
+				const response = await fetch(filesUrl, { signal: controller.signal })
 				const result = await response.json().catch(() => null)
 
 				if (!response.ok) {
@@ -69,6 +75,8 @@ export function Dashboard({ auth }: DashboardProps) {
 				}
 				if (!cancelled) {
 					setFiles(Array.isArray(result?.files) ? result.files : [])
+					setFileTotals({ totalItems: result.totalItems, totalPages: result.totalPages })
+					if (page > Math.max(1, result.totalPages)) setPage(Math.max(1, result.totalPages))
 				}
 			} catch (error) {
 				if (!cancelled) {
@@ -82,8 +90,23 @@ export function Dashboard({ auth }: DashboardProps) {
 		void loadFiles()
 		return () => {
 			cancelled = true
+			controller.abort()
 		}
-	}, [auth.username, filesVersion])
+	}, [auth.username, filesVersion, page])
+
+	const changePage = (nextPage: number) => {
+		if (loadingFiles || nextPage === page || nextPage < 1 || nextPage > (fileTotals?.totalPages ?? 1)) return
+
+		setPage(nextPage)
+		setLoadingFiles(true)
+		setFiles([])
+	}
+
+	const refreshFiles = () => {
+		setPage(1)
+		setFileTotals(null)
+		setFilesVersion((version) => version + 1)
+	}
 
 	const openFile = async (file: DriveFile) => {
 		previewRequest.current?.abort()
@@ -180,7 +203,7 @@ export function Dashboard({ auth }: DashboardProps) {
 			setUploadMessage(
 				`${selectedFiles.length} ${selectedFiles.length === 1 ? 'file' : 'files'} uploaded.`,
 			)
-			setFilesVersion((version) => version + 1)
+			refreshFiles()
 		} catch (error) {
 			setUploadError(error instanceof Error ? error.message : 'Upload failed. Please try again.')
 		} finally {
@@ -225,7 +248,7 @@ export function Dashboard({ auth }: DashboardProps) {
 			}
 
 			setUploadMessage(`Folder “${name}” created.`)
-			setFilesVersion((version) => version + 1)
+			refreshFiles()
 			setFolderName('')
 			setFolderModalError('')
 			setFolderModalOpen(false)
@@ -237,7 +260,7 @@ export function Dashboard({ auth }: DashboardProps) {
 	}
 
 	return (
-		<section className="flex flex-1 flex-col pb-8">
+		<section className="flex min-w-0 flex-1 flex-col pb-8">
 
 			<input
 				accept={ACCEPTED_FILE_TYPES}
@@ -260,20 +283,30 @@ export function Dashboard({ auth }: DashboardProps) {
 				{...{ webkitdirectory: '', directory: '' } as React.InputHTMLAttributes<HTMLInputElement>}
 			/>
 
-			<div className="mx-auto w-full flex-1 p-4 md:w-2/3 md:p-6 xl:w-2/3">
+			<div className="mx-auto w-full min-w-0 max-w-full flex-1 p-4 md:w-2/3 md:p-6 xl:w-2/3">
 				<DashboardHeader username={auth.preferredUsername || auth.username} />
-				<FileFilters
-					filePicker={filePicker}
-					folderPicker={folderPicker}
-					openFolderModal={() => {
-						setFolderName('')
-						setFolderModalError('')
-						setFolderModalOpen(true)
-					}}
-				/>
+				<div className="mb-4 flex items-center gap-1 sm:gap-3">
+					<FolderBreadcrumbs
+						prefix={userEmail ? `${userEmail}/` : ''}
+						rootPrefix={userEmail ? `${userEmail}/` : ''}
+					/>
+					<FileFilters
+						filePicker={filePicker}
+						folderPicker={folderPicker}
+						openFolderModal={() => {
+							setFolderName('')
+							setFolderModalError('')
+							setFolderModalOpen(true)
+						}}
+					/>
+				</div>
 				<FileList
 					files={files}
 					isLoading={loadingFiles}
+					page={page}
+					hasNextPage={page < (fileTotals?.totalPages ?? 1)}
+					totals={fileTotals}
+					onPageChange={changePage}
 					error={filesError}
 					onOpen={(file) => void openFile(file)}
 				/>
@@ -333,10 +366,10 @@ function DashboardHeader({
 	return (
 		<div className="mb-5 flex flex-wrap items-center justify-between gap-3">
 			<div>
-				<h1 className="text-2xl font-medium">Welcome back, {username}</h1>
+				<h1 className="break-words text-2xl font-medium">Welcome back, {username}</h1>
 			</div>
 			<div className="flex items-center gap-2">
-				<div className="join">
+				<div className="join flex max-w-full flex-wrap justify-center">
 					<button aria-label="List view" aria-pressed="true" className="btn btn-sm join-item btn-active" type="button">☷</button>
 					<button aria-label="Grid view" aria-pressed="false" className="btn btn-sm join-item" type="button">▦</button>
 				</div>
@@ -355,12 +388,12 @@ function FileFilters({
 	openFolderModal: () => void
 }) {
 	return (
-		<div aria-label="File filters" className="mb-6 flex flex-wrap items-center gap-2 pb-1">
-			<button className="btn btn-sm shrink-0 rounded-full" type="button">Type <span aria-hidden="true" className="opacity-50">⌄</span></button>
-			<button className="btn btn-sm shrink-0 rounded-full" type="button">People <span aria-hidden="true" className="opacity-50">⌄</span></button>
-			<button className="btn btn-sm shrink-0 rounded-full" type="button">Modified <span aria-hidden="true" className="opacity-50">⌄</span></button>
+		<div aria-label="File filters" className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
+			<button className="btn btn-xs sm:btn-sm shrink-0 rounded-full" type="button">Type <span aria-hidden="true" className="opacity-50">⌄</span></button>
+			<button className="btn btn-xs sm:btn-sm shrink-0 rounded-full" type="button">People <span aria-hidden="true" className="opacity-50">⌄</span></button>
+			<button className="btn btn-xs sm:btn-sm shrink-0 rounded-full" type="button">Modified <span aria-hidden="true" className="opacity-50">⌄</span></button>
 			<details className="dropdown dropdown-end ml-auto">
-				<summary className="btn btn-primary btn-sm shrink-0 gap-2">
+				<summary className="btn btn-primary btn-xs sm:btn-sm shrink-0 gap-1 sm:gap-2">
 					<span aria-hidden="true">＋</span>
 					New
 				</summary>
@@ -387,13 +420,20 @@ function FileList({
 	isLoading,
 	error,
 	onOpen,
+	page,
+	hasNextPage,
+	totals,
+	onPageChange,
 }: {
 	files: DriveFile[]
 	isLoading: boolean
 	error: string
 	onOpen: (file: DriveFile) => void
+	page: number
+	hasNextPage: boolean
+	totals: { totalItems: number; totalPages: number } | null
+	onPageChange: (page: number) => void
 }) {
-	const [page, setPage] = useState(1)
 	const [sort, setSort] = useState<{ key: FileSortKey; ascending: boolean }>({
 		key: 'name',
 		ascending: true,
@@ -404,7 +444,6 @@ function FileList({
 			key,
 			ascending: previous.key === key ? !previous.ascending : true,
 		}))
-		setPage(1)
 	}
 
 	const sortedFiles = [...files].sort((a, b) => {
@@ -429,19 +468,15 @@ function FileList({
 		return (sort.ascending ? comparison : -comparison) || a.key.localeCompare(b.key)
 	})
 
-	const pageSize = 20
-	const pageCount = Math.max(1, Math.ceil(files.length / pageSize))
-	const currentPage = Math.min(page, pageCount)
-	const startIndex = (currentPage - 1) * pageSize
-	const pageFiles = sortedFiles.slice(startIndex, startIndex + pageSize)
+	const pageFiles = sortedFiles
 
 	return (
-		<div className="card border border-base-300 bg-base-100 shadow-sm">
-			<div className="card-body p-0">
+		<div className="card min-w-0 max-w-full border border-base-300 bg-base-100 shadow-sm">
+			<div className="card-body min-w-0 p-0">
 				{isLoading && <p className="p-5 text-sm text-base-content/60" role="status">Loading files…</p>}
 				{error && <p className="alert alert-error m-4" role="alert">{error}</p>}
 				{!isLoading && !error && files.length === 0 && (
-					<p className="p-5 text-sm text-base-content/60">No files in this folder yet.</p>
+					<p className="p-5 text-sm text-base-content/60">{page === 1 ? 'No files in this folder yet.' : 'No more files.'}</p>
 				)}
 
 				<ul className="divide-y divide-base-300 sm:hidden">
@@ -462,8 +497,14 @@ function FileList({
 					))}
 				</ul>
 
-				<div className="hidden overflow-x-auto sm:block">
-					<table className="table table-hover">
+				<div className="hidden min-w-0 max-w-full sm:block">
+					<table className="table table-fixed table-hover w-full">
+						<colgroup>
+							<col className="w-[42%]" />
+							<col className="w-[18%]" />
+							<col />
+							<col className="w-14" />
+						</colgroup>
 						<thead>
 							<tr>
 								{sortableColumns.map(({ key, label }) => (
@@ -476,7 +517,8 @@ function FileList({
 											className="btn btn-ghost btn-xs -ml-2 gap-2"
 											onClick={() => sortBy(key)}
 											type="button"
-											aria-label={`Sort by ${label}, ${sort.key === key && sort.ascending ? 'descending' : 'ascending'}`}
+											aria-label={`Sort this page by ${label}, ${sort.key === key && sort.ascending ? 'descending' : 'ascending'}`}
+											title="Sort files on this page"
 										>
 											{label}
 											<span aria-hidden="true">{sort.key === key ? (sort.ascending ? '↑' : '↓') : '↕'}</span>
@@ -497,13 +539,13 @@ function FileList({
 									<td>
 										<div className="flex items-center gap-3">
 											<FileIcon fileName={file.name} size="small" />
-											<span className="font-medium">{file.name}</span>
+											<span className="min-w-0 truncate font-medium" title={file.name}>{file.name}</span>
 										</div>
 									</td>
-									<td className="text-base-content/60">
+									<td className="whitespace-normal break-words text-base-content/60">
 										{file.size === undefined ? '—' : `${(file.size / 1024).toFixed(1)} KB`}
 									</td>
-									<td className="text-base-content/60">{file.lastModified ?? '—'}</td>
+									<td className="whitespace-normal break-words text-base-content/60">{file.lastModified ?? '—'}</td>
 									<td>
 										<FileActionsMenu fileName={file.name} />
 									</td>
@@ -513,49 +555,46 @@ function FileList({
 					</table>
 				</div>
 
-				{!isLoading && !error && (
-					<footer className="grid grid-cols-1 items-center gap-3 border-t border-base-300 p-4 text-center lg:grid-cols-[1fr_auto_1fr] lg:text-left">
-						<p className="text-sm text-base-content/60" role="status">
-							{files.length === 0
-								? '0 files'
-								: `${startIndex + 1}–${Math.min(startIndex + pageSize, files.length)} of ${files.length} files`}
-						</p>
-						<nav aria-label="File pages" className="max-w-full justify-self-center overflow-x-auto">
-							<div className="join">
+				<footer className="grid grid-cols-1 items-center gap-3 border-t border-base-300 p-4 text-center lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)] lg:text-left">
+					<p className="text-sm text-base-content/60" role="status">
+						{isLoading ? 'Loading…' : error ? 'Page unavailable' : `${totals?.totalItems ?? 0} files total · Sort applies to this page`}
+					</p>
+					<nav aria-label="File pages" className="min-w-0 max-w-full justify-self-center">
+						<div className="join flex max-w-full flex-wrap justify-center">
+							<button
+								aria-label="Previous page"
+								className="btn btn-sm join-item"
+								disabled={isLoading || page === 1}
+								onClick={() => onPageChange(page - 1)}
+								type="button"
+							>
+								«
+							</button>
+							{Array.from({ length: Math.max(1, totals?.totalPages ?? 1) }, (_, index) => index + 1).map((pageNumber) => (
 								<button
-									aria-label="Previous page"
-									className="btn btn-sm join-item"
-									disabled={currentPage === 1}
-									onClick={() => setPage(currentPage - 1)}
+									key={pageNumber}
+									className={`join-item btn btn-sm ${page === pageNumber ? 'btn-active' : ''}`}
+									aria-label={`Page ${pageNumber}`}
+									aria-current={page === pageNumber ? 'page' : undefined}
+									disabled={isLoading || !totals?.totalPages}
+									onClick={() => onPageChange(pageNumber)}
 									type="button"
 								>
-									«
+									{pageNumber}
 								</button>
-								{Array.from({ length: pageCount }, (_, index) => index + 1).map((pageNumber) => (
-									<button
-										key={pageNumber}
-										aria-label={`Page ${pageNumber} of ${pageCount}`}
-										aria-current={currentPage === pageNumber ? 'page' : undefined}
-										className={`btn btn-sm join-item ${currentPage === pageNumber ? 'btn-active' : ''}`}
-										onClick={() => setPage(pageNumber)}
-										type="button"
-									>
-										{pageNumber}
-									</button>
-								))}
-								<button
-									aria-label="Next page"
-									className="btn btn-sm join-item"
-									disabled={currentPage === pageCount}
-									onClick={() => setPage(currentPage + 1)}
-									type="button"
-								>
-									»
-								</button>
-							</div>
-						</nav>
-					</footer>
-				)}
+							))}
+							<button
+								aria-label="Next page"
+								className="btn btn-sm join-item"
+								disabled={isLoading || !hasNextPage}
+								onClick={() => onPageChange(page + 1)}
+								type="button"
+							>
+								»
+							</button>
+						</div>
+					</nav>
+				</footer>
 			</div>
 		</div>
 	)
