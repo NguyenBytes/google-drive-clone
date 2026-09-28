@@ -1,3 +1,5 @@
+import { FeatureArtwork } from './HomeArtwork'
+
 const features = [
 	{
 		title: 'Upload in a few clicks',
@@ -19,8 +21,9 @@ const features = [
 export function HomeFeatures() {
 	return (
 		<div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-4">
-			{features.map((feature) => (
+			{features.map((feature, index) => (
 				<article key={feature.title} className="rounded-xl border border-base-300 p-5">
+					<FeatureArtwork index={index} />
 					<div className="mb-4 grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary">
 						<svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path d={feature.path} strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />

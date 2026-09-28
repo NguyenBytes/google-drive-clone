@@ -3,54 +3,21 @@ import {
 	GetObjectCommand,
 	ListObjectsV2Command,
 	PutObjectCommand,
-	S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { _Object } from "@aws-sdk/client-s3";
 import type { Request, Response } from "express";
 import type { FileUploadBody } from "../models/file.model.js";
 
-const s3 = new S3Client({ region: process.env.AWS_REGION ?? "us-west-2" });
+import { s3, getBucket } from "../libs/s3.js";
+import { getNonEmptyString, validateFileUpload } from "../utils/validation.js";
+import { sendServiceError } from "../utils/errors.js";
+
 const PRESIGNED_URL_EXPIRES_IN = 900;
-const MAX_UPLOAD_BYTES = 18 * 1024 * 1024;
-const ALLOWED_EXTENSIONS = new Set([
-	"jpg", "jpeg", "png", "gif", "webp", "bmp", "heic",
-	"mp4", "mov", "webm", "mkv", "avi",
-	"mp3", "wav", "m4a", "aac", "ogg", "flac",
-	"pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv", "rtf", "odt", "ods",
-]);
 
-const getBucket = (): string => {
-	const bucket = process.env.S3_BUCKET_NAME;
-
-	if (!bucket) {
-		throw new Error("S3_BUCKET_NAME is not configured");
-	}
-
-	return bucket;
-};
-
-const getNonEmptyString = (value: unknown): string | undefined =>
-	typeof value === "string" && value.trim().length > 0 ? value : undefined;
-
-const sendServiceError = (response: Response, error: unknown): void => {
-	console.error("S3 request failed", error);
-
-	const isConfigurationError =
-		error instanceof Error && error.message === "S3_BUCKET_NAME is not configured";
-
-	response.status(isConfigurationError ? 500 : 502).json({
-		error: isConfigurationError
-			? "S3_BUCKET_NAME is not configured"
-			: "Unable to complete S3 request",
-	});
-};
-
-const upload = async (
+export const createFile = async (
 	request: Request<unknown, unknown, FileUploadBody>,
 	response: Response,
-	status: number,
-	message: string,
 ): Promise<void> => {
 	const key = getNonEmptyString(request.body.key);
 	const { content, contentType } = request.body;
@@ -60,15 +27,9 @@ const upload = async (
 		return;
 	}
 
-	const isFolderMarker = key.endsWith("/") && content.length === 0;
-	const extension = key.split("/").pop()?.split(".").pop()?.toLowerCase();
-	if (!isFolderMarker && (!extension || !ALLOWED_EXTENSIONS.has(extension))) {
-		response.status(415).json({ error: "This file type is not allowed" });
-		return;
-	}
-	const decodedSize = Buffer.from(content, "base64").byteLength;
-	if (decodedSize > MAX_UPLOAD_BYTES) {
-		response.status(413).json({ error: "Files must be 18 MB or smaller" });
+	const validationError = validateFileUpload(key, content);
+	if (validationError) {
+		response.status(validationError.status).json({ error: validationError.error });
 		return;
 	}
 
@@ -82,7 +43,11 @@ const upload = async (
 					typeof contentType === "string" ? contentType : "application/octet-stream",
 			}),
 		);
-		response.status(status).json({ key, message });
+		const isUpdate = request.method === "PUT";
+		response.status(isUpdate ? 200 : 201).json({
+			key,
+			message: isUpdate ? "File updated" : "File uploaded",
+		});
 	} catch (error) {
 		sendServiceError(response, error);
 	}
@@ -232,15 +197,8 @@ export const getPresignedDownloadUrl = async (
 	}
 };
 
-export const createFile = (
-	request: Request<unknown, unknown, FileUploadBody>,
-	response: Response,
-): Promise<void> => upload(request, response, 201, "File uploaded");
-
-export const updateFile = (
-	request: Request<unknown, unknown, FileUploadBody>,
-	response: Response,
-): Promise<void> => upload(request, response, 200, "File updated");
+// S3 uses PutObject for both creation and replacement.
+export const updateFile = createFile;
 
 export const deleteFile = async (request: Request, response: Response): Promise<void> => {
 	const key = getNonEmptyString(request.query.key);

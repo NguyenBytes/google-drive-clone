@@ -2,9 +2,10 @@ import { Link } from 'react-router'
 import type { AuthState } from '../../types'
 import { HomeDrivePreview } from '../ui/HomeDrivePreview'
 import { HomeFeatures } from '../ui/HomeFeatures'
+import { HomeArtwork } from '../ui/HomeArtwork'
 
 export function HomePage({ auth }: { auth: AuthState }) {
-	const destination = auth.status === 'signedIn' ? '/dashboard' : '/login'
+	const destination = auth.status === 'signedIn' ? '/dashboard' : '/signup'
 	const actionLabel = auth.status === 'signedIn' ? 'Open your drive' : 'Get started'
 
 	return (
@@ -38,6 +39,7 @@ export function HomePage({ auth }: { auth: AuthState }) {
 						)}
 						<a className="btn btn-ghost rounded-lg" href="#features">Explore Drivebox</a>
 					</div>
+					<HomeArtwork />
 				</section>
 
 				<HomeDrivePreview />

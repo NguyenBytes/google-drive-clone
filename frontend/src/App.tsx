@@ -6,10 +6,12 @@ import {
 	Routes,
 } from 'react-router'
 import { fetchUserAttributes, getCurrentUser } from 'aws-amplify/auth'
+import { Hub } from 'aws-amplify/utils'
 import { isAuthConfigured } from './auth'
 import { Dashboard } from './components/pages/Dashboard'
 import { HomePage } from './components/pages/HomePage'
 import { LoginPage } from './components/pages/LoginPage'
+import { SignupPage } from './components/pages/SignupPage'
 import { ProfilePage } from './components/pages/ProfilePage'
 import { ProtectedRoute } from './components/ui/ProtectedRoute'
 import { SiteLayout } from './components/ui/SiteLayout'
@@ -42,7 +44,13 @@ function App() {
 	}
 
 	useEffect(() => {
+		const stopListening = Hub.listen('auth', ({ payload }) => {
+			if (payload.event === 'signedIn' || payload.event === 'signInWithRedirect') {
+				void refreshAuth()
+			}
+		})
 		void refreshAuth()
+		return stopListening
 	}, [])
 
 	return (
@@ -54,6 +62,7 @@ function App() {
 						path="login"
 						element={<LoginPage auth={auth} refreshAuth={refreshAuth} />}
 					/>
+					<Route path="signup" element={<SignupPage auth={auth} refreshAuth={refreshAuth} />} />
 					<Route element={<ProtectedRoute auth={auth} />}>
 						<Route path="dashboard" element={<Dashboard key={auth.username} auth={auth} />} />
 						<Route path="profile" element={<ProfilePage auth={auth} setAuth={setAuth} />} />
