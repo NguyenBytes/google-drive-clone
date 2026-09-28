@@ -2,12 +2,68 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" sizes="any" href="/favicon.svg?v=2" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>Drivebox — Your Personal Cloud Drive</title>
+    <meta
+      name="description"
+      content="Keep your documents, photos, and projects together with Drivebox. Upload files, organize folders, and preview browser-supported files in your personal cloud drive."
+    />
+    <meta name="theme-color" content="#ffffff" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:site_name" content="Drivebox" />
+    <meta property="og:title" content="Drivebox — Your Personal Cloud Drive" />
+    <meta
+      property="og:description"
+      content="A home for your documents, photos, and projects. Upload your files, keep them organized, and open them whenever you need them."
+    />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Drivebox — Your Personal Cloud Drive" />
+    <meta
+      name="twitter:description"
+      content="Upload files, organize folders, and preview browser-supported files in your personal cloud drive."
+    />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <header>
+        <a href="/" aria-label="Drivebox home">Drivebox</a>
+      </header>
+      <main>
+        <h1>Drivebox — Your Personal Cloud Drive</h1>
+        <p>Everything important. In one place.</p>
+        <p>
+          A home for your documents, photos, and projects. Upload your files,
+          keep them organized, and open them whenever you need them.
+        </p>
+        <a href="/login">Get started with Drivebox</a>
+
+        <section aria-labelledby="features-title">
+          <h2 id="features-title">A simpler way to keep your files</h2>
+          <h3>Upload in a few clicks</h3>
+          <p>
+            Bring documents, images, and media together. Add individual files
+            or upload a whole folder.
+          </p>
+          <h3>Give everything a place</h3>
+          <p>
+            Create folders for your projects and personal files. Keep related
+            work together from the start.
+          </p>
+          <h3>Open it right here</h3>
+          <p>
+            Double-click a file to open its preview. View browser-supported
+            files right inside your drive.
+          </p>
+        </section>
+
+        <noscript>
+          <p>Enable JavaScript to sign in, upload files, and use your drive.</p>
+        </noscript>
+      </main>
+      <footer>Drivebox — Your files. A little more organized.</footer>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

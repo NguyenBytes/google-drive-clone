@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router'
+import { Navigate, useNavigate } from 'react-router'
 import {
 	confirmSignUp,
 	signIn,
@@ -86,7 +86,7 @@ export function LoginPage({ auth, refreshAuth }: LoginPageProps) {
 			: 'Confirm your account'
 
 	return (
-		<section className="hero min-h-[calc(100vh-65px)] px-4 py-10">
+		<section className="hero flex-1 px-4 py-10">
 			<form
 				className="card w-full max-w-md bg-base-100 shadow-xl"
 				onSubmit={(event) => void submit(event)}

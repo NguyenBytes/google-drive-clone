@@ -1,13 +1,20 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { fetchUserAttributes, updateUserAttributes } from 'aws-amplify/auth'
+import { deleteUserAttributes, fetchUserAttributes, updateUserAttributes } from 'aws-amplify/auth'
 import type { AuthState } from '../../types'
 
 const messageFor = (error: unknown) =>
 	error instanceof Error ? error.message : 'Something went wrong. Please try again.'
 
-export function ProfilePage({ auth }: { auth: AuthState }) {
+type ProfilePageProps = {
+	auth: AuthState
+	setAuth: (value: AuthState) => void
+}
+
+export function ProfilePage({ auth, setAuth }: ProfilePageProps) {
 	const [email, setEmail] = useState('')
+	const [preferredUsername, setPreferredUsername] = useState('')
+	const [savedPreferredUsername, setSavedPreferredUsername] = useState('')
 	const [notice, setNotice] = useState('')
 	const [error, setError] = useState('')
 	const [busy, setBusy] = useState(true)
@@ -17,6 +24,8 @@ export function ProfilePage({ auth }: { auth: AuthState }) {
 			try {
 				const attributes = await fetchUserAttributes()
 				setEmail(attributes.email ?? '')
+				setPreferredUsername(attributes.preferred_username ?? '')
+				setSavedPreferredUsername(attributes.preferred_username ?? '')
 			} catch (caught) {
 				setError(messageFor(caught))
 			} finally {
@@ -34,6 +43,22 @@ export function ProfilePage({ auth }: { auth: AuthState }) {
 		setBusy(true)
 
 		try {
+			const nextPreferredUsername = preferredUsername.trim()
+
+			if (nextPreferredUsername !== savedPreferredUsername) {
+				if (nextPreferredUsername) {
+					await updateUserAttributes({
+						userAttributes: { preferred_username: nextPreferredUsername },
+					})
+				} else {
+					await deleteUserAttributes({ userAttributeKeys: ['preferred_username'] })
+				}
+
+				setSavedPreferredUsername(nextPreferredUsername)
+				setPreferredUsername(nextPreferredUsername)
+				setAuth({ ...auth, preferredUsername: nextPreferredUsername || null })
+			}
+
 			const result = await updateUserAttributes({ userAttributes: { email } })
 			const nextStep = result.email?.nextStep.updateAttributeStep
 			setNotice(
@@ -67,6 +92,23 @@ export function ProfilePage({ auth }: { auth: AuthState }) {
 						<span className="fieldset-label">Username</span>
 						<input className="input input-bordered w-full" disabled value={auth.username ?? ''} />
 					</label>
+
+					<label className="fieldset">
+						<span className="fieldset-label">Display name</span>
+						<input
+							className="input input-bordered w-full"
+							autoComplete="nickname"
+							disabled={busy}
+							onChange={(event) => setPreferredUsername(event.target.value)}
+							placeholder={auth.username ?? ''}
+							type="text"
+							value={preferredUsername}
+						/>
+						<span className="text-xs text-base-content/60">
+							Shown throughout Drivebox. Leave blank to use your username.
+						</span>
+					</label>
+
 					<label className="fieldset">
 						<span className="fieldset-label">Email address</span>
 						<input

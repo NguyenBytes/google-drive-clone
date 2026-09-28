@@ -5,7 +5,7 @@ import {
 	Route,
 	Routes,
 } from 'react-router'
-import { getCurrentUser } from 'aws-amplify/auth'
+import { fetchUserAttributes, getCurrentUser } from 'aws-amplify/auth'
 import { isAuthConfigured } from './auth'
 import { Dashboard } from './components/pages/Dashboard'
 import { HomePage } from './components/pages/HomePage'
@@ -29,7 +29,13 @@ function App() {
 
 		try {
 			const user = await getCurrentUser()
-			setAuth({ status: 'signedIn', username: user.username })
+			const attributes = await fetchUserAttributes().catch(() => null)
+
+			setAuth({
+				status: 'signedIn',
+				username: user.username,
+				preferredUsername: attributes?.preferred_username?.trim() || null,
+			})
 		} catch {
 			setAuth({ status: 'signedOut', username: null })
 		}
@@ -50,7 +56,7 @@ function App() {
 					/>
 					<Route element={<ProtectedRoute auth={auth} />}>
 						<Route path="dashboard" element={<Dashboard auth={auth} />} />
-						<Route path="profile" element={<ProfilePage auth={auth} />} />
+						<Route path="profile" element={<ProfilePage auth={auth} setAuth={setAuth} />} />
 					</Route>
 					<Route path="*" element={<Navigate replace to="/" />} />
 				</Route>

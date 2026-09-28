@@ -1,6 +1,7 @@
 export type AuthState = {
 	status: 'loading' | 'signedOut' | 'signedIn'
 	username: string | null
+	preferredUsername?: string | null
 }
 
 export type DriveFile = {
@@ -8,5 +9,6 @@ export type DriveFile = {
 	name: string
 	size?: number
 	lastModified?: string
+	lastModifiedAt?: string
 	eTag?: string
 }

@@ -1,6 +1,7 @@
 import { Link, Outlet, useNavigate } from 'react-router'
 import { signOut } from 'aws-amplify/auth'
 import type { AuthState } from '../../types'
+import { SiteFooter } from './SiteFooter'
 
 type SiteLayoutProps = {
 	auth: AuthState
@@ -9,6 +10,7 @@ type SiteLayoutProps = {
 
 export function SiteLayout({ auth, setAuth }: SiteLayoutProps) {
 	const navigate = useNavigate()
+	const displayName = auth.preferredUsername || auth.username
 
 	const logout = async () => {
 		await signOut()
@@ -17,15 +19,20 @@ export function SiteLayout({ auth, setAuth }: SiteLayoutProps) {
 	}
 
 	return (
-		<div className="min-h-screen bg-base-200">
-			<header className="navbar border-b border-base-300 bg-base-100 px-4 shadow-sm">
+		<div className="flex min-h-dvh flex-col bg-base-200">
+			<header className="border-b border-base-300 bg-base-100 shadow-sm">
+			<div className="navbar mx-auto w-full px-4 md:w-2/3 md:px-6 xl:w-2/3">
 				<Link
 					className="btn btn-ghost gap-3 px-2 text-xl normal-case"
 					to={auth.status === 'signedIn' ? '/dashboard' : '/'}
 				>
-					<span className="grid h-8 w-8 place-items-center rounded bg-primary text-sm font-black text-primary-content">
-						D
-					</span>
+					<img
+						alt=""
+						className="h-8 w-8 shrink-0"
+						src="/favicon.svg?v=2"
+						width={32}
+						height={32}
+					/>
 					Drivebox
 				</Link>
 
@@ -54,13 +61,13 @@ export function SiteLayout({ auth, setAuth }: SiteLayoutProps) {
 							>
 								<div className="w-9 rounded-full bg-primary text-primary-content">
 									<span className="inline-block translate-y-1/4">
-										{auth.username?.slice(0, 1).toUpperCase()}
+										{displayName?.slice(0, 1).toUpperCase()}
 									</span>
 								</div>
 							</summary>
 							<ul className="menu dropdown-content z-20 mt-3 w-56 rounded-box border border-base-300 bg-base-100 p-2 shadow">
 								<li className="menu-title">
-									<span className="truncate">{auth.username}</span>
+									<span className="truncate">{displayName}</span>
 								</li>
 								<li><Link to="/profile">Profile settings</Link></li>
 								<li><button onClick={() => void logout()} type="button">Log out</button></li>
@@ -70,8 +77,13 @@ export function SiteLayout({ auth, setAuth }: SiteLayoutProps) {
 						<Link className="btn btn-primary btn-sm" to="/login">Log in</Link>
 					)}
 				</nav>
+			</div>
 			</header>
-			<main><Outlet /></main>
+			<main className="flex flex-1 flex-col">
+				<Outlet />
+			</main>
+
+			<SiteFooter />
 		</div>
 	)
 }

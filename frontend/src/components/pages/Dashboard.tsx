@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchUserAttributes } from 'aws-amplify/auth'
 import type { DriveFile, AuthState } from '../../types'
+import { FileActionsMenu } from '../ui/FileActionsMenu'
 
 const configuredApiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 const API_URL = (/^https?:\/\//i.test(configuredApiUrl)
@@ -236,7 +237,7 @@ export function Dashboard({ auth }: DashboardProps) {
 	}
 
 	return (
-		<section className="min-h-[calc(100vh-65px)]">
+		<section className="flex flex-1 flex-col pb-8">
 
 			<input
 				accept={ACCEPTED_FILE_TYPES}
@@ -259,8 +260,8 @@ export function Dashboard({ auth }: DashboardProps) {
 				{...{ webkitdirectory: '', directory: '' } as React.InputHTMLAttributes<HTMLInputElement>}
 			/>
 
-			<main className="p-4 sm:p-6">
-				<DashboardHeader username={auth.username} />
+			<div className="mx-auto w-full flex-1 p-4 md:w-2/3 md:p-6 xl:w-2/3">
+				<DashboardHeader username={auth.preferredUsername || auth.username} />
 				<FileFilters
 					filePicker={filePicker}
 					folderPicker={folderPicker}
@@ -281,7 +282,7 @@ export function Dashboard({ auth }: DashboardProps) {
 					message={uploadMessage}
 					error={uploadError}
 				/>
-			</main>
+			</div>
 
 			{folderModalOpen && (
 				<NewFolderModal
@@ -332,7 +333,6 @@ function DashboardHeader({
 	return (
 		<div className="mb-5 flex flex-wrap items-center justify-between gap-3">
 			<div>
-				<p className="text-sm text-base-content/60">My Drive</p>
 				<h1 className="text-2xl font-medium">Welcome back, {username}</h1>
 			</div>
 			<div className="flex items-center gap-2">
@@ -355,7 +355,7 @@ function FileFilters({
 	openFolderModal: () => void
 }) {
 	return (
-		<div aria-label="File filters" className="mb-6 flex items-center gap-2 overflow-x-auto pb-1">
+		<div aria-label="File filters" className="mb-6 flex flex-wrap items-center gap-2 pb-1">
 			<button className="btn btn-sm shrink-0 rounded-full" type="button">Type <span aria-hidden="true" className="opacity-50">⌄</span></button>
 			<button className="btn btn-sm shrink-0 rounded-full" type="button">People <span aria-hidden="true" className="opacity-50">⌄</span></button>
 			<button className="btn btn-sm shrink-0 rounded-full" type="button">Modified <span aria-hidden="true" className="opacity-50">⌄</span></button>
@@ -374,6 +374,14 @@ function FileFilters({
 	)
 }
 
+const sortableColumns = [
+	{ key: 'name', label: 'Name' },
+	{ key: 'size', label: 'Size' },
+	{ key: 'lastModified', label: 'Last modified' },
+] as const
+
+type FileSortKey = typeof sortableColumns[number]['key']
+
 function FileList({
 	files,
 	isLoading,
@@ -385,13 +393,51 @@ function FileList({
 	error: string
 	onOpen: (file: DriveFile) => void
 }) {
+	const [page, setPage] = useState(1)
+	const [sort, setSort] = useState<{ key: FileSortKey; ascending: boolean }>({
+		key: 'name',
+		ascending: true,
+	})
+
+	const sortBy = (key: FileSortKey) => {
+		setSort((previous) => ({
+			key,
+			ascending: previous.key === key ? !previous.ascending : true,
+		}))
+		setPage(1)
+	}
+
+	const sortedFiles = [...files].sort((a, b) => {
+		let comparison: number
+
+		if (sort.key === 'name') {
+			comparison = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+		} else {
+			const valueA = sort.key === 'size' ? a.size : Date.parse(a.lastModifiedAt ?? a.lastModified ?? '')
+			const valueB = sort.key === 'size' ? b.size : Date.parse(b.lastModifiedAt ?? b.lastModified ?? '')
+			const missingA = valueA === undefined || !Number.isFinite(valueA)
+			const missingB = valueB === undefined || !Number.isFinite(valueB)
+
+			if (missingA || missingB) {
+				if (missingA !== missingB) return missingA ? 1 : -1
+				comparison = 0
+			} else {
+				comparison = valueA! - valueB!
+			}
+		}
+
+		return (sort.ascending ? comparison : -comparison) || a.key.localeCompare(b.key)
+	})
+
+	const pageSize = 20
+	const pageCount = Math.max(1, Math.ceil(files.length / pageSize))
+	const currentPage = Math.min(page, pageCount)
+	const startIndex = (currentPage - 1) * pageSize
+	const pageFiles = sortedFiles.slice(startIndex, startIndex + pageSize)
+
 	return (
 		<div className="card border border-base-300 bg-base-100 shadow-sm">
 			<div className="card-body p-0">
-				<div className="border-b border-base-300 px-5 py-4">
-					<h2 className="font-medium">Files</h2>
-				</div>
-
 				{isLoading && <p className="p-5 text-sm text-base-content/60" role="status">Loading files…</p>}
 				{error && <p className="alert alert-error m-4" role="alert">{error}</p>}
 				{!isLoading && !error && files.length === 0 && (
@@ -399,19 +445,19 @@ function FileList({
 				)}
 
 				<ul className="divide-y divide-base-300 sm:hidden">
-					{files.map((file) => (
+					{pageFiles.map((file) => (
 						<li
 							className="flex cursor-pointer items-center gap-3 p-4 transition-colors hover:bg-base-200"
 							key={file.key}
 							onDoubleClick={() => onOpen(file)}
 							title="Double-click to open"
 						>
-							<FileIcon size="large" />
+							<FileIcon fileName={file.name} size="large" />
 							<div className="min-w-0 flex-1">
 								<p className="truncate font-medium">{file.name}</p>
 								<p className="text-sm text-base-content/60">{file.lastModified ?? '—'}</p>
 							</div>
-							<button aria-label={`More options for ${file.name}`} className="btn btn-ghost btn-sm" type="button">⋮</button>
+							<FileActionsMenu fileName={file.name} />
 						</li>
 					))}
 				</ul>
@@ -419,10 +465,29 @@ function FileList({
 				<div className="hidden overflow-x-auto sm:block">
 					<table className="table table-hover">
 						<thead>
-							<tr><th>Name</th><th>Size</th><th>Last modified</th><th aria-label="Actions" /></tr>
+							<tr>
+								{sortableColumns.map(({ key, label }) => (
+									<th
+										key={key}
+										scope="col"
+										aria-sort={sort.key === key ? (sort.ascending ? 'ascending' : 'descending') : 'none'}
+									>
+										<button
+											className="btn btn-ghost btn-xs -ml-2 gap-2"
+											onClick={() => sortBy(key)}
+											type="button"
+											aria-label={`Sort by ${label}, ${sort.key === key && sort.ascending ? 'descending' : 'ascending'}`}
+										>
+											{label}
+											<span aria-hidden="true">{sort.key === key ? (sort.ascending ? '↑' : '↓') : '↕'}</span>
+										</button>
+									</th>
+								))}
+								<th scope="col" aria-label="Actions" />
+							</tr>
 						</thead>
 						<tbody>
-							{files.map((file) => (
+							{pageFiles.map((file) => (
 								<tr
 									key={file.key}
 									className="cursor-pointer transition-colors hover:bg-base-200"
@@ -431,7 +496,7 @@ function FileList({
 								>
 									<td>
 										<div className="flex items-center gap-3">
-											<FileIcon size="small" />
+											<FileIcon fileName={file.name} size="small" />
 											<span className="font-medium">{file.name}</span>
 										</div>
 									</td>
@@ -440,13 +505,57 @@ function FileList({
 									</td>
 									<td className="text-base-content/60">{file.lastModified ?? '—'}</td>
 									<td>
-										<button aria-label={`More options for ${file.name}`} className="btn btn-ghost btn-xs" type="button">⋮</button>
+										<FileActionsMenu fileName={file.name} />
 									</td>
 								</tr>
 							))}
 						</tbody>
 					</table>
 				</div>
+
+				{!isLoading && !error && (
+					<footer className="grid grid-cols-1 items-center gap-3 border-t border-base-300 p-4 text-center lg:grid-cols-[1fr_auto_1fr] lg:text-left">
+						<p className="text-sm text-base-content/60" role="status">
+							{files.length === 0
+								? '0 files'
+								: `${startIndex + 1}–${Math.min(startIndex + pageSize, files.length)} of ${files.length} files`}
+						</p>
+						<nav aria-label="File pages" className="max-w-full justify-self-center overflow-x-auto">
+							<div className="join">
+								<button
+									aria-label="Previous page"
+									className="btn btn-sm join-item"
+									disabled={currentPage === 1}
+									onClick={() => setPage(currentPage - 1)}
+									type="button"
+								>
+									«
+								</button>
+								{Array.from({ length: pageCount }, (_, index) => index + 1).map((pageNumber) => (
+									<button
+										key={pageNumber}
+										aria-label={`Page ${pageNumber} of ${pageCount}`}
+										aria-current={currentPage === pageNumber ? 'page' : undefined}
+										className={`btn btn-sm join-item ${currentPage === pageNumber ? 'btn-active' : ''}`}
+										onClick={() => setPage(pageNumber)}
+										type="button"
+									>
+										{pageNumber}
+									</button>
+								))}
+								<button
+									aria-label="Next page"
+									className="btn btn-sm join-item"
+									disabled={currentPage === pageCount}
+									onClick={() => setPage(currentPage + 1)}
+									type="button"
+								>
+									»
+								</button>
+							</div>
+						</nav>
+					</footer>
+				)}
 			</div>
 		</div>
 	)
@@ -465,17 +574,41 @@ function FilePreviewModal({
 	error: string
 	onClose: () => void
 }) {
+	const isTextFile = file.name.toLowerCase().endsWith('.txt')
+
 	return (
-		<div className="modal modal-open bg-gray-500/25 p-0" role="dialog" aria-modal="true" aria-labelledby="file-preview-title">
-			<div className="modal-box flex h-screen max-h-none w-screen max-w-none flex-col rounded-none bg-gray-700/40 p-0 text-white shadow-none">
-				<header className="flex shrink-0 items-center justify-between border-b border-white/20 px-5 py-3">
+		<div className="modal modal-open bg-black/50 p-0" role="dialog" aria-modal="true" aria-labelledby="file-preview-title">
+			<div className={`modal-box flex h-screen max-h-none w-screen max-w-none flex-col rounded-none p-0 shadow-none ${isTextFile ? 'bg-white text-gray-900' : 'bg-transparent text-white'}`}>
+				<header className={`flex shrink-0 items-center justify-between border-b px-5 py-3 ${isTextFile ? 'border-gray-200' : 'border-white/20'}`}>
 					<div className="min-w-0">
 						<h2 className="truncate font-medium" id="file-preview-title">{file.name}</h2>
-						<p className="text-sm text-white/60">{file.lastModified ?? ''}</p>
+						<p className={`text-sm ${isTextFile ? 'text-gray-500' : 'text-white/60'}`}>{file.lastModified ?? ''}</p>
 					</div>
 					<div className="ml-4 flex shrink-0 items-center gap-2">
-						{preview && <a className="btn btn-sm" download={file.name} href={preview.url}>Download</a>}
-						<button aria-label="Close preview" className="btn btn-circle btn-sm" onClick={onClose} type="button">✕</button>
+						{preview && (
+							<a
+								aria-label="Download file"
+								className="btn btn-circle btn-sm"
+								download={file.name}
+								href={preview.url}
+								title="Download file"
+							>
+								<svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path d="M12 4v16m-6-6 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+								</svg>
+							</a>
+						)}
+						<button
+							aria-label="Close preview"
+							className="btn btn-circle btn-sm"
+							onClick={onClose}
+							title="Close preview"
+							type="button"
+						>
+							<svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path d="m6 6 12 12M18 6 6 18" strokeLinecap="round" strokeWidth="2" />
+							</svg>
+						</button>
 					</div>
 				</header>
 
@@ -484,7 +617,7 @@ function FilePreviewModal({
 					{error && <p className="alert alert-error">{error}</p>}
 					{preview && (
 						<iframe
-							className="h-full w-full bg-transparent"
+							className={`h-full w-full ${isTextFile ? 'bg-white [color-scheme:light]' : 'bg-transparent'}`}
 							src={preview.url}
 							title={`Preview of ${file.name}`}
 						/>
@@ -496,11 +629,44 @@ function FilePreviewModal({
 	)
 }
 
-function FileIcon({ size }: { size: 'small' | 'large' }) {
+function FileIcon({ fileName, size }: { fileName: string; size: 'small' | 'large' }) {
+	const extension = fileName.split('.').pop()?.toLowerCase() ?? ''
 	const dimensions = size === 'large' ? 'h-10 w-10' : 'h-8 w-8'
+	const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic']
+	const videoExtensions = ['mp4', 'mov', 'webm', 'mkv', 'avi']
+	const audioExtensions = ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac']
+	const spreadsheetExtensions = ['xls', 'xlsx', 'csv', 'ods']
+	const presentationExtensions = ['ppt', 'pptx']
+	const documentExtensions = ['doc', 'docx', 'rtf', 'odt']
+
+	let icon = '📄'
+	let colors = 'bg-primary/10 text-primary'
+	if (imageExtensions.includes(extension)) {
+		icon = '🖼️'
+		colors = 'bg-sky-500/10 text-sky-600'
+	} else if (videoExtensions.includes(extension)) {
+		icon = '🎬'
+		colors = 'bg-violet-500/10 text-violet-600'
+	} else if (audioExtensions.includes(extension)) {
+		icon = '🎵'
+		colors = 'bg-pink-500/10 text-pink-600'
+	} else if (extension === 'pdf') {
+		icon = 'PDF'
+		colors = 'bg-red-500/10 text-red-600'
+	} else if (spreadsheetExtensions.includes(extension)) {
+		icon = '▦'
+		colors = 'bg-emerald-500/10 text-emerald-600'
+	} else if (presentationExtensions.includes(extension)) {
+		icon = '▧'
+		colors = 'bg-amber-500/10 text-amber-600'
+	} else if (documentExtensions.includes(extension)) {
+		icon = '▤'
+		colors = 'bg-blue-500/10 text-blue-600'
+	}
+
 	return (
-		<span aria-hidden="true" className={`grid ${dimensions} place-items-center rounded bg-primary/10 text-primary`}>
-			▤
+		<span aria-hidden="true" className={`grid ${dimensions} place-items-center rounded ${colors}`}>
+			{icon}
 		</span>
 	)
 }

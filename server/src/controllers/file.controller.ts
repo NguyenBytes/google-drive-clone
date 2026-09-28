@@ -107,6 +107,7 @@ export const listFiles = async (request: Request, response: Response): Promise<v
 					key,
 					name,
 					size: file.Size,
+					lastModifiedAt: file.LastModified?.toISOString(),
 					lastModified: file.LastModified
 						? `${new Intl.DateTimeFormat("en-US", {
 							dateStyle: "medium",
