@@ -1,4 +1,6 @@
 import {
+	CopyObjectCommand,
+	HeadObjectCommand,
 	DeleteObjectCommand,
 	GetObjectCommand,
 	ListObjectsV2Command,
@@ -170,11 +172,11 @@ export const downloadFile = async (request: Request, response: Response): Promis
 			return;
 		}
 
+		response.attachment(key.split("/").pop() || "download");
 		response.setHeader("Content-Type", result.ContentType ?? "application/octet-stream");
 		if (result.ContentLength !== undefined) {
 			response.setHeader("Content-Length", result.ContentLength);
 		}
-		response.setHeader("Content-Disposition", `attachment; filename="${key.split("/").pop()}"`);
 		response.send(Buffer.from(await result.Body.transformToByteArray()));
 	} catch (error) {
 		sendServiceError(response, error);
@@ -219,5 +221,96 @@ export const deleteFile = async (request: Request, response: Response): Promise<
 		response.status(204).send();
 	} catch (error) {
 		sendServiceError(response, error);
+	}
+};
+
+export const renameFile = async (request: Request, response: Response): Promise<void> => {
+	const key = getNonEmptyString(request.body?.key);
+	const name = getNonEmptyString(request.body?.name)?.trim();
+	if (!key || !name || /[\\/\u0000-\u001f\u007f]/.test(name) || name === "." || name === "..") {
+		response.status(400).json({ error: "A key and a name without slashes or control characters are required" });
+		return;
+	}
+	const isDirectory = key.endsWith("/");
+	const sourceBase = isDirectory ? key.slice(0, -1) : key;
+	const parent = sourceBase.slice(0, sourceBase.lastIndexOf("/") + 1);
+	const targetBase = parent + name;
+	const newKey = targetBase + (isDirectory ? "/" : "");
+	if (Buffer.byteLength(newKey) > 1024) {
+		response.status(400).json({ error: "The new name is too long" });
+		return;
+	}
+	if (key === newKey) {
+		response.json({ key, name, isDirectory });
+		return;
+	}
+
+	let stage: "read" | "copy" | "delete" = "read";
+	try {
+		const bucket = getBucket();
+		const objects: _Object[] = [];
+		if (isDirectory) {
+			let token: string | undefined;
+			do {
+				const result = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: key, ContinuationToken: token }));
+				objects.push(...(result.Contents ?? []).filter((object) => object.Key?.startsWith(key)));
+				token = result.IsTruncated ? result.NextContinuationToken : undefined;
+			} while (token);
+			if (!objects.length) {
+				response.status(404).json({ error: "Folder not found" });
+				return;
+			}
+		} else {
+			const source = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+			objects.push({ Key: key, ETag: source.ETag });
+		}
+
+		// A file and directory with the same display name both count as conflicts.
+		let token: string | undefined;
+		do {
+			const result = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: targetBase, ContinuationToken: token }));
+			if (result.Contents?.some((object) => object.Key === targetBase || object.Key?.startsWith(`${targetBase}/`))) {
+				response.status(409).json({ error: "A file or folder with that name already exists" });
+				return;
+			}
+			token = result.IsTruncated ? result.NextContinuationToken : undefined;
+		} while (token);
+
+		const moves = objects.map((object) => ({
+			object,
+			target: isDirectory ? newKey + object.Key!.slice(key.length) : newKey,
+		}));
+		if (moves.some(({ target }) => Buffer.byteLength(target) > 1024)) {
+			response.status(400).json({ error: "The new name makes a nested file path too long" });
+			return;
+		}
+
+		// Preserve all originals until every destination object has been copied.
+		stage = "copy";
+		for (const { object, target } of moves) {
+			await s3.send(new CopyObjectCommand({
+				Bucket: bucket,
+				Key: target,
+				CopySource: `${bucket}/${object.Key!.split("/").map(encodeURIComponent).join("/")}`,
+				CopySourceIfMatch: object.ETag,
+				IfNoneMatch: "*",
+			}));
+		}
+		stage = "delete";
+		for (const { object } of moves) {
+			await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: object.Key!, IfMatch: object.ETag }));
+		}
+		response.json({ key: newKey, name, isDirectory });
+	} catch (error) {
+		if (stage !== "read") {
+			console.error("S3 rename failed", error);
+			response.status(502).json({ error: stage === "copy"
+				? "Rename could not finish. Original items were kept; some copies may exist under the new name."
+				: "Items were copied to the new name, but some originals could not be removed. Refresh the folder to review both names." });
+		} else if ((error as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode === 404) {
+			response.status(404).json({ error: "File or folder not found" });
+		} else {
+			sendServiceError(response, error);
+		}
 	}
 };

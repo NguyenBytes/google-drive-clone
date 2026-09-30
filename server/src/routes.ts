@@ -5,6 +5,7 @@ import {
 	downloadFile,
 	getPresignedDownloadUrl,
 	listFiles,
+	renameFile,
 	updateFile,
 } from "./controllers/file.controller.js";
 
@@ -18,6 +19,7 @@ router.get("/files", listFiles);
 router.get("/files/presigned-url", getPresignedDownloadUrl);
 router.get("/files/object", downloadFile);
 router.post("/files", createFile);
+router.post("/files/rename", renameFile);
 router.put("/files", updateFile);
 router.delete("/files", deleteFile);
 

@@ -1,11 +1,17 @@
 import { useId, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { DownloadButton } from './DownloadButton'
 
 type FileActionsMenuProps = {
 	fileName: string
+	onDelete: () => void
+	onRename: () => void
+	isDeleting: boolean
+	downloadUrl: string
+	isDirectory?: boolean
 }
 
-export function FileActionsMenu({ fileName }: FileActionsMenuProps) {
+export function FileActionsMenu({ fileName, onDelete, onRename, isDeleting, downloadUrl, isDirectory }: FileActionsMenuProps) {
 	const menuId = useId()
 	const menuRef = useRef<HTMLDivElement>(null)
 
@@ -36,14 +42,20 @@ export function FileActionsMenu({ fileName }: FileActionsMenuProps) {
 					ref={menuRef}
 				>
 					<ul className="menu w-full p-0" aria-label={`Actions for ${fileName}`}>
-						{['Download', 'Rename', 'Delete'].map((action) => (
+						<li><DownloadButton url={downloadUrl} fileName={fileName} disabled={isDirectory} /></li>
+						{['Rename', 'Delete'].map((action) => (
 							<li key={action}>
 								<button
 									className={action === 'Delete' ? 'text-error' : undefined}
-									onClick={() => menuRef.current?.hidePopover()}
+									disabled={isDeleting}
+									onClick={() => {
+										menuRef.current?.hidePopover()
+										if (action === 'Delete') onDelete()
+										if (action === 'Rename') onRename()
+									}}
 									type="button"
 								>
-									{action}
+									{action === 'Delete' && isDeleting ? 'Deleting…' : action}
 								</button>
 							</li>
 						))}

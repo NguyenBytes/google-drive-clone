@@ -47,6 +47,7 @@ The server listens on port `3000` by default.
 | `POST` | `/api/v1/files` | Upload an object; JSON body requires `key` and base64 `content`. |
 | `PUT` | `/api/v1/files` | Replace an object using the same request body. |
 | `DELETE` | `/api/v1/files?key=…` | Delete an object. |
+| `POST` | `/api/v1/files/rename` | Rename a file or directory within its parent; JSON body requires `key` and `name`. |
 
 The API root and health endpoint are available at `/api/v1/` and `/api/v1/health`.
 Use a prefix ending in `/` to browse a directory. Directory entries appear in the

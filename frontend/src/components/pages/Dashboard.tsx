@@ -2,12 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { fetchUserAttributes } from 'aws-amplify/auth'
 import type { DriveFile, AuthState } from '../../types'
 import { FileActionsMenu } from '../ui/FileActionsMenu'
+import { DownloadButton } from '../ui/DownloadButton'
+import { RenameModal } from '../ui/RenameModal'
 import { FolderBreadcrumbs } from '../ui/FolderBreadcrumbs'
 
 const configuredApiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 const API_URL = (/^https?:\/\//i.test(configuredApiUrl)
 	? configuredApiUrl
 	: `http://${configuredApiUrl}`).replace(/\/+$/, '')
+const downloadUrl = (key: string) => `${API_URL}/files/object?${new URLSearchParams({ key })}`
 const MAX_FILE_BYTES = 18 * 1024 * 1024
 const ALLOWED_EXTENSIONS = [
 	'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic',
@@ -29,6 +32,10 @@ type FilePreview = {
 export function Dashboard({ auth }: DashboardProps) {
 	const [uploadMessage, setUploadMessage] = useState('')
 	const [uploadError, setUploadError] = useState('')
+	const [deleteError, setDeleteError] = useState('')
+	const [deletingKey, setDeletingKey] = useState<string | null>(null)
+	const [renameTarget, setRenameTarget] = useState<DriveFile | null>(null)
+	const deleteInProgress = useRef(false)
 	const [uploading, setUploading] = useState(false)
 	const [files, setFiles] = useState<DriveFile[]>([])
 	const [userEmail, setUserEmail] = useState<string | null>(null)
@@ -175,6 +182,43 @@ export function Dashboard({ auth }: DashboardProps) {
 		setPreviewLoading(false)
 	}
 
+	const deleteFile = async (file: DriveFile) => {
+		if (deleteInProgress.current) return
+		deleteInProgress.current = true
+		setDeletingKey(file.key)
+		setDeleteError('')
+		try {
+			const requestUrl = new URL(`${API_URL}/files`)
+			requestUrl.searchParams.set('key', file.key)
+			const response = await fetch(requestUrl, { method: 'DELETE' })
+			if (!response.ok) {
+				const result = await response.json().catch(() => null)
+				throw new Error(result?.error ?? `Could not delete ${file.name}.`)
+			}
+			presignedUrlCache.current.delete(file.key)
+			if (selectedFile?.key === file.key) closePreview()
+			setFilesVersion((version) => version + 1)
+		} catch (error) {
+			setDeleteError(error instanceof Error ? error.message : `Could not delete ${file.name}.`)
+		} finally {
+			deleteInProgress.current = false
+			setDeletingKey(null)
+		}
+	}
+
+	const renameFile = async (file: DriveFile, name: string) => {
+		const response = await fetch(`${API_URL}/files/rename`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ key: file.key, name }),
+		})
+		const result = await response.json().catch(() => null)
+		setFilesVersion((version) => version + 1)
+		if (!response.ok) throw new Error(result?.error ?? 'Could not rename this item.')
+		presignedUrlCache.current.clear()
+		if (selectedFile?.key === file.key) closePreview()
+	}
+
 	const uploadFiles = async (selectedFiles: FileList | null, keepFolderPaths = false) => {
 		if (!selectedFiles?.length) return
 		if (!userEmail) {
@@ -318,6 +362,8 @@ export function Dashboard({ auth }: DashboardProps) {
 						}}
 					/>
 				</div>
+				{deleteError && <p className="alert alert-error mb-4" role="alert">{deleteError}</p>}
+				{deletingKey && <p className="mb-4 text-sm" role="status">Deleting…</p>}
 				<FileList
 					files={files}
 					isLoading={loadingFiles}
@@ -327,6 +373,9 @@ export function Dashboard({ auth }: DashboardProps) {
 					onPageChange={changePage}
 					error={filesError}
 					onOpen={(file) => void openFile(file)}
+					onDelete={(file) => void deleteFile(file)}
+					onRename={setRenameTarget}
+					isDeleting={deletingKey !== null}
 				/>
 				<UploadStatus
 					isUploading={uploading}
@@ -335,6 +384,10 @@ export function Dashboard({ auth }: DashboardProps) {
 				/>
 			</div>
 
+			{renameTarget && (
+				<RenameModal key={renameTarget.key} file={renameTarget}
+					onRename={(name) => renameFile(renameTarget, name)} onClose={() => setRenameTarget(null)} />
+			)}
 			{folderModalOpen && (
 				<NewFolderModal
 					name={folderName}
@@ -434,6 +487,9 @@ const sortableColumns = [
 type FileSortKey = typeof sortableColumns[number]['key']
 
 function FileList({
+	onRename,
+	onDelete,
+	isDeleting,
 	files,
 	isLoading,
 	error,
@@ -444,6 +500,9 @@ function FileList({
 	onPageChange,
 }: {
 	files: DriveFile[]
+	onDelete: (file: DriveFile) => void
+	onRename: (file: DriveFile) => void
+	isDeleting: boolean
 	isLoading: boolean
 	error: string
 	onOpen: (file: DriveFile) => void
@@ -510,7 +569,7 @@ function FileList({
 								<button className="block max-w-full truncate text-left font-medium hover:underline" onClick={() => onOpen(file)} onDoubleClick={(event) => event.stopPropagation()} type="button">{file.name}</button>
 								<p className="text-sm text-base-content/60">{file.lastModified ?? '—'}</p>
 							</div>
-							<FileActionsMenu fileName={file.name} />
+							<FileActionsMenu downloadUrl={downloadUrl(file.key)} isDirectory={file.isDirectory} fileName={file.name} onDelete={() => onDelete(file)} onRename={() => onRename(file)} isDeleting={isDeleting} />
 						</li>
 					))}
 				</ul>
@@ -565,7 +624,7 @@ function FileList({
 									</td>
 									<td className="whitespace-normal break-words text-base-content/60">{file.lastModified ?? '—'}</td>
 									<td>
-										<FileActionsMenu fileName={file.name} />
+										<FileActionsMenu downloadUrl={downloadUrl(file.key)} isDirectory={file.isDirectory} fileName={file.name} onDelete={() => onDelete(file)} onRename={() => onRename(file)} isDeleting={isDeleting} />
 									</td>
 								</tr>
 							))}
@@ -642,19 +701,7 @@ function FilePreviewModal({
 						<p className={`text-sm ${isTextFile ? 'text-gray-500' : 'text-white/60'}`}>{file.lastModified ?? ''}</p>
 					</div>
 					<div className="ml-4 flex shrink-0 items-center gap-2">
-						{preview && (
-							<a
-								aria-label="Download file"
-								className="btn btn-circle btn-sm"
-								download={file.name}
-								href={preview.url}
-								title="Download file"
-							>
-								<svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path d="M12 4v16m-6-6 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-								</svg>
-							</a>
-						)}
+						<DownloadButton url={downloadUrl(file.key)} fileName={file.name} iconOnly />
 						<button
 							aria-label="Close preview"
 							className="btn btn-circle btn-sm"
