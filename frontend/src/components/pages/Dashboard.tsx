@@ -32,6 +32,9 @@ export function Dashboard({ auth }: DashboardProps) {
 	const [uploading, setUploading] = useState(false)
 	const [files, setFiles] = useState<DriveFile[]>([])
 	const [userEmail, setUserEmail] = useState<string | null>(null)
+	const [folderPath, setFolderPath] = useState('')
+	const rootPrefix = userEmail ? `${userEmail}/` : ''
+	const currentPrefix = rootPrefix + folderPath
 	const [loadingFiles, setLoadingFiles] = useState(true)
 	const [filesError, setFilesError] = useState('')
 	const [filesVersion, setFilesVersion] = useState(0)
@@ -65,7 +68,7 @@ export function Dashboard({ auth }: DashboardProps) {
 				if (!cancelled) setUserEmail(email)
 
 				const filesUrl = new URL(`${API_URL}/files`)
-				filesUrl.searchParams.set('prefix', `${email}/`)
+				filesUrl.searchParams.set('prefix', `${email}/${folderPath}`)
 				filesUrl.searchParams.set('page', String(page))
 				const response = await fetch(filesUrl, { signal: controller.signal })
 				const result = await response.json().catch(() => null)
@@ -92,7 +95,17 @@ export function Dashboard({ auth }: DashboardProps) {
 			cancelled = true
 			controller.abort()
 		}
-	}, [auth.username, filesVersion, page])
+	}, [auth.username, filesVersion, page, folderPath])
+
+	const navigateToFolder = (prefix: string) => {
+		if (!rootPrefix || !prefix.startsWith(rootPrefix) || prefix === currentPrefix) return
+		setFolderPath(prefix.slice(rootPrefix.length))
+		setPage(1)
+		setFileTotals(null)
+		setFiles([])
+		setFilesError('')
+		setLoadingFiles(true)
+	}
 
 	const changePage = (nextPage: number) => {
 		if (loadingFiles || nextPage === page || nextPage < 1 || nextPage > (fileTotals?.totalPages ?? 1)) return
@@ -109,6 +122,10 @@ export function Dashboard({ auth }: DashboardProps) {
 	}
 
 	const openFile = async (file: DriveFile) => {
+		if (file.isDirectory) {
+			navigateToFolder(file.key)
+			return
+		}
 		previewRequest.current?.abort()
 
 		const controller = new AbortController()
@@ -183,7 +200,7 @@ export function Dashboard({ auth }: DashboardProps) {
 				const content = dataUrl.slice(dataUrl.indexOf(',') + 1)
 				const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath
 				const relativeKey = keepFolderPaths && relativePath ? relativePath : file.name
-				const key = `${userEmail}/${relativeKey}`
+				const key = `${currentPrefix}${relativeKey}`
 				const response = await fetch(`${API_URL}/files`, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
@@ -231,7 +248,7 @@ export function Dashboard({ auth }: DashboardProps) {
 		setUploading(true)
 
 		try {
-			const prefix = `${userEmail}/`
+			const prefix = currentPrefix
 			const response = await fetch(`${API_URL}/files`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -287,8 +304,9 @@ export function Dashboard({ auth }: DashboardProps) {
 				<DashboardHeader username={auth.preferredUsername || auth.username} />
 				<div className="mb-4 flex items-center gap-1 sm:gap-3">
 					<FolderBreadcrumbs
-						prefix={userEmail ? `${userEmail}/` : ''}
-						rootPrefix={userEmail ? `${userEmail}/` : ''}
+						prefix={currentPrefix}
+						rootPrefix={rootPrefix}
+						onNavigate={navigateToFolder}
 					/>
 					<FileFilters
 						filePicker={filePicker}
@@ -476,7 +494,7 @@ function FileList({
 				{isLoading && <p className="p-5 text-sm text-base-content/60" role="status">Loading files…</p>}
 				{error && <p className="alert alert-error m-4" role="alert">{error}</p>}
 				{!isLoading && !error && files.length === 0 && (
-					<p className="p-5 text-sm text-base-content/60">{page === 1 ? 'No files in this folder yet.' : 'No more files.'}</p>
+					<p className="p-5 text-sm text-base-content/60">{page === 1 ? 'This folder is empty.' : 'No more items.'}</p>
 				)}
 
 				<ul className="divide-y divide-base-300 sm:hidden">
@@ -487,9 +505,9 @@ function FileList({
 							onDoubleClick={() => onOpen(file)}
 							title="Double-click to open"
 						>
-							<FileIcon fileName={file.name} size="large" />
+							<FileIcon fileName={file.name} isDirectory={file.isDirectory} size="large" />
 							<div className="min-w-0 flex-1">
-								<p className="truncate font-medium">{file.name}</p>
+								<button className="block max-w-full truncate text-left font-medium hover:underline" onClick={() => onOpen(file)} onDoubleClick={(event) => event.stopPropagation()} type="button">{file.name}</button>
 								<p className="text-sm text-base-content/60">{file.lastModified ?? '—'}</p>
 							</div>
 							<FileActionsMenu fileName={file.name} />
@@ -538,8 +556,8 @@ function FileList({
 								>
 									<td>
 										<div className="flex items-center gap-3">
-											<FileIcon fileName={file.name} size="small" />
-											<span className="min-w-0 truncate font-medium" title={file.name}>{file.name}</span>
+											<FileIcon fileName={file.name} isDirectory={file.isDirectory} size="small" />
+											<button className="min-w-0 truncate text-left font-medium hover:underline" onClick={() => onOpen(file)} onDoubleClick={(event) => event.stopPropagation()} title={file.name} type="button">{file.name}</button>
 										</div>
 									</td>
 									<td className="whitespace-normal break-words text-base-content/60">
@@ -557,7 +575,7 @@ function FileList({
 
 				<footer className="grid grid-cols-1 items-center gap-3 border-t border-base-300 p-4 text-center lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)] lg:text-left">
 					<p className="text-sm text-base-content/60" role="status">
-						{isLoading ? 'Loading…' : error ? 'Page unavailable' : `${totals?.totalItems ?? 0} files total · Sort applies to this page`}
+						{isLoading ? 'Loading…' : error ? 'Page unavailable' : `${totals?.totalItems ?? 0} items total · Sort applies to this page`}
 					</p>
 					<nav aria-label="File pages" className="min-w-0 max-w-full justify-self-center">
 						<div className="join flex max-w-full flex-wrap justify-center">
@@ -668,7 +686,7 @@ function FilePreviewModal({
 	)
 }
 
-function FileIcon({ fileName, size }: { fileName: string; size: 'small' | 'large' }) {
+function FileIcon({ fileName, size, isDirectory }: { fileName: string; isDirectory?: boolean; size: 'small' | 'large' }) {
 	const extension = fileName.split('.').pop()?.toLowerCase() ?? ''
 	const dimensions = size === 'large' ? 'h-10 w-10' : 'h-8 w-8'
 	const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic']
@@ -680,7 +698,10 @@ function FileIcon({ fileName, size }: { fileName: string; size: 'small' | 'large
 
 	let icon = '📄'
 	let colors = 'bg-primary/10 text-primary'
-	if (imageExtensions.includes(extension)) {
+	if (isDirectory) {
+		icon = '📁'
+		colors = 'bg-amber-500/10 text-amber-600'
+	} else if (imageExtensions.includes(extension)) {
 		icon = '🖼️'
 		colors = 'bg-sky-500/10 text-sky-600'
 	} else if (videoExtensions.includes(extension)) {

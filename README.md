@@ -41,7 +41,7 @@ The server listens on port `3000` by default.
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/api/v1/health` | Health check. |
-| `GET` | `/api/v1/files?prefix=…` | List objects under the required prefix with `key`, `name`, and metadata. |
+| `GET` | `/api/v1/files?prefix=…` | List immediate files and directories under the required prefix with `key`, `name`, `isDirectory`, and file metadata. |
 | `GET` | `/api/v1/files/presigned-url?key=…` | Get a presigned download URL for one object (valid for 15 minutes). |
 | `GET` | `/api/v1/files/object?key=…` | Download one object. |
 | `POST` | `/api/v1/files` | Upload an object; JSON body requires `key` and base64 `content`. |
@@ -49,6 +49,10 @@ The server listens on port `3000` by default.
 | `DELETE` | `/api/v1/files?key=…` | Delete an object. |
 
 The API root and health endpoint are available at `/api/v1/` and `/api/v1/health`.
+Use a prefix ending in `/` to browse a directory. Directory entries appear in the
+`files` array with `isDirectory: true` and a key ending in `/`; pass that key as
+the next prefix to list its contents. Both empty folders and folders implied by
+nested objects are included. Pagination totals count both files and directories.
 For local development, the API allows requests from `http://localhost:5173`. Set `CORS_ORIGIN` on the server to a comma-separated list of allowed frontend origins when using a different host or port.
 
 For uploads, `contentType` is optional. Example payload:

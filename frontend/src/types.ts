@@ -5,6 +5,7 @@ export type AuthState = {
 }
 
 export type DriveFile = {
+	isDirectory?: boolean
 	key: string
 	name: string
 	size?: number

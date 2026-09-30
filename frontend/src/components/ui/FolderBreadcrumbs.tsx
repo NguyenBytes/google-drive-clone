@@ -1,9 +1,10 @@
 type FolderBreadcrumbsProps = {
 	prefix: string
 	rootPrefix: string
+	onNavigate: (prefix: string) => void
 }
 
-export function FolderBreadcrumbs({ prefix, rootPrefix }: FolderBreadcrumbsProps) {
+export function FolderBreadcrumbs({ prefix, rootPrefix, onNavigate }: FolderBreadcrumbsProps) {
 	const relativePath = prefix.startsWith(rootPrefix) ? prefix.slice(rootPrefix.length) : ''
 	const folders = relativePath.split('/').filter(Boolean)
 	const segments = ['My files', ...folders]
@@ -13,12 +14,17 @@ export function FolderBreadcrumbs({ prefix, rootPrefix }: FolderBreadcrumbsProps
 			<ol>
 				{segments.map((segment, index) => (
 					<li key={index}>
-						<span
-							aria-current={index === segments.length - 1 ? 'location' : undefined}
-							className={index === segments.length - 1 ? 'font-medium' : undefined}
-						>
-							{segment}
-						</span>
+						{index === segments.length - 1 ? (
+							<span aria-current="location" className="font-medium">{segment}</span>
+						) : (
+							<button
+								className="hover:underline"
+								onClick={() => onNavigate(rootPrefix + folders.slice(0, index).map((folder) => `${folder}/`).join(''))}
+								type="button"
+							>
+								{segment}
+							</button>
+						)}
 					</li>
 				))}
 			</ol>

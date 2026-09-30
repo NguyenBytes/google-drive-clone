@@ -5,7 +5,7 @@ import {
 	PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import type { _Object } from "@aws-sdk/client-s3";
+import type { _Object, ListObjectsV2CommandOutput } from "@aws-sdk/client-s3";
 import type { Request, Response } from "express";
 import type { FileUploadBody } from "../models/file.model.js";
 
@@ -14,6 +14,12 @@ import { getNonEmptyString, validateFileUpload } from "../utils/validation.js";
 import { sendServiceError } from "../utils/errors.js";
 
 const PRESIGNED_URL_EXPIRES_IN = 900;
+
+// CommonPrefixes includes folders even when no explicit folder marker exists.
+const listingEntries = (result: ListObjectsV2CommandOutput): _Object[] => [
+	...(result.Contents ?? []).filter((file) => file.Key && !file.Key.endsWith("/")),
+	...(result.CommonPrefixes ?? []).flatMap((folder) => folder.Prefix ? [{ Key: folder.Prefix }] : []),
+].sort((a, b) => Buffer.compare(Buffer.from(a.Key!), Buffer.from(b.Key!)));
 
 export const createFile = async (
 	request: Request<unknown, unknown, FileUploadBody>,
@@ -82,11 +88,12 @@ export const listFiles = async (request: Request, response: Response): Promise<v
 				const result = await s3.send(new ListObjectsV2Command({
 					Bucket: getBucket(),
 					Prefix: prefix,
+					Delimiter: "/",
 					MaxKeys: pageSize - objects.length,
 					ContinuationToken: nextContinuationToken,
 				}));
 
-				objects.push(...(result.Contents ?? []).filter((file) => file.Key && !file.Key.endsWith("/")));
+				objects.push(...listingEntries(result));
 				nextContinuationToken = result.IsTruncated ? result.NextContinuationToken : undefined;
 			} while (objects.length < pageSize && nextContinuationToken);
 		}
@@ -94,19 +101,17 @@ export const listFiles = async (request: Request, response: Response): Promise<v
 		let totalItems = 0;
 		let countToken: string | undefined;
 
-		// S3 doesn't return a total count. Count metadata without retaining
-		// the entire listing or including directory marker objects.
+		// Count immediate files and folders without retaining the entire listing.
 		do {
 			const result = await s3.send(new ListObjectsV2Command({
 				Bucket: getBucket(),
 				Prefix: prefix,
+				Delimiter: "/",
 				MaxKeys: 1000,
 				ContinuationToken: countToken,
 			}));
 
-			for (const file of result.Contents ?? []) {
-				if (!file.Key || file.Key.endsWith("/")) continue;
-
+			for (const file of listingEntries(result)) {
 				if (page !== undefined && totalItems >= (page - 1) * pageSize && objects.length < pageSize) {
 					objects.push(file);
 				}
@@ -128,6 +133,7 @@ export const listFiles = async (request: Request, response: Response): Promise<v
 				return {
 					key,
 					name,
+					isDirectory: key?.endsWith("/") ?? false,
 					size: file.Size,
 					lastModifiedAt: file.LastModified?.toISOString(),
 					lastModified: file.LastModified

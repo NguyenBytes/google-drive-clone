@@ -4,11 +4,12 @@
   "description": "google drive clone used to learn aws vpc networking, uses aws s3 and cognito, and aws dynamodb",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "node scripts/dev.cjs",
+    "dev": "tsx watch src/index.ts",
     "dev:server": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
+    "test": "npm run tests:watch",
     "tests": "npm run build && jest --runInBand",
     "tests:watch": "tsx watch --clear-screen=false --include './src/**' --include './tests/**' --include './jest.config.cjs' --include './tsconfig.json' --ignore './dist/**' scripts/watch-tests.cjs"
   },
