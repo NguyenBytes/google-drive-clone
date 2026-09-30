@@ -304,9 +304,11 @@ export const renameFile = async (request: Request, response: Response): Promise<
 	} catch (error) {
 		if (stage !== "read") {
 			console.error("S3 rename failed", error);
-			response.status(502).json({ error: stage === "copy"
-				? "Rename could not finish. Original items were kept; some copies may exist under the new name."
-				: "Items were copied to the new name, but some originals could not be removed. Refresh the folder to review both names." });
+			response.status(502).json({
+				error: stage === "copy"
+					? "Rename could not finish. Original items were kept; some copies may exist under the new name."
+					: "Items were copied to the new name, but some originals could not be removed. Refresh the folder to review both names."
+			});
 		} else if ((error as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode === 404) {
 			response.status(404).json({ error: "File or folder not found" });
 		} else {

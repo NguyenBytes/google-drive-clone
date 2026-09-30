@@ -1,26 +1,11 @@
 name: Provision AWS Infrastructure
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - "terraform/**"
-      - ".github/workflows/terraform.yml"
-  push:
-    branches:
-      - main
-    paths:
-      - "terraform/**"
-      - ".github/workflows/terraform.yml"
+  workflow_call:
 
 permissions:
   contents: read
   id-token: write
-
-concurrency:
-  group: terraform-production
-  cancel-in-progress: false
 
 env:
   AWS_REGION: us-west-2
