@@ -9,9 +9,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "npm run tests:watch",
+    "test": "jest --watchAll --runInBand",
     "tests": "npm run build && jest --runInBand",
-    "tests:watch": "tsx watch --clear-screen=false --include './src/**' --include './tests/**' --include './jest.config.cjs' --include './tsconfig.json' --ignore './dist/**' scripts/watch-tests.cjs"
+    "tests:watch": "npm run test"
   },
   "author": "",
   "license": "ISC",

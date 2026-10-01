@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { apiFetch } from '../../utils/apiFetch'
 
 type DownloadButtonProps = {
 	url: string
@@ -18,7 +19,7 @@ export function DownloadButton({ url, fileName, iconOnly = false, disabled = fal
 		setIsDownloading(true)
 		setError('')
 		try {
-			const response = await fetch(url)
+			const response = await apiFetch(url)
 			if (!response.ok) {
 				const result = await response.json().catch(() => null)
 				throw new Error(result?.error ?? 'Could not download this file.')

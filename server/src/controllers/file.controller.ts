@@ -14,6 +14,7 @@ import type { FileUploadBody } from "../models/file.model.js";
 import { s3, getBucket } from "../libs/s3.js";
 import { getNonEmptyString, validateFileUpload } from "../utils/validation.js";
 import { sendServiceError } from "../utils/errors.js";
+import { safeHttpHandler } from "../utils/safeHttpHandler.js";
 
 const PRESIGNED_URL_EXPIRES_IN = 900;
 
@@ -23,77 +24,45 @@ const listingEntries = (result: ListObjectsV2CommandOutput): _Object[] => [
 	...(result.CommonPrefixes ?? []).flatMap((folder) => folder.Prefix ? [{ Key: folder.Prefix }] : []),
 ].sort((a, b) => Buffer.compare(Buffer.from(a.Key!), Buffer.from(b.Key!)));
 
-export const createFile = async (
-	request: Request<unknown, unknown, FileUploadBody>,
-	response: Response,
-): Promise<void> => {
-	const key = getNonEmptyString(request.body.key);
-	const { content, contentType } = request.body;
+/** Handles file and directory requests backed by S3. */
+export class FileController {
+	/** GET /api/v1/files — List immediate files and folders with numbered or token-based pagination. */
+	async getFiles(request: Request, response: Response): Promise<void> {
+		const prefix = getNonEmptyString(request.query.prefix);
+		if (!prefix) {
+			response.status(400).json({ error: "A non-empty prefix query parameter is required" });
+			return;
+		}
 
-	if (!key || typeof content !== "string") {
-		response.status(400).json({ error: "key and base64-encoded content are required" });
-		return;
-	}
+		const pageSize = 10;
+		const page = request.query.page === undefined ? undefined : Number(request.query.page);
+		if (page !== undefined && (typeof request.query.page !== "string" || !Number.isSafeInteger(page) || page < 1)) {
+			response.status(400).json({ error: "page must be a positive integer" });
+			return;
+		}
+		const continuationToken = getNonEmptyString(request.query.continuationToken);
+		if (request.query.continuationToken !== undefined && !continuationToken) {
+			response.status(400).json({ error: "continuationToken must be a non-empty string" });
+			return;
+		}
 
-	const validationError = validateFileUpload(key, content);
-	if (validationError) {
-		response.status(validationError.status).json({ error: validationError.error });
-		return;
-	}
+		const [bucketError, bucket] = await safeHttpHandler(getBucket);
+		if (bucketError) return sendServiceError(response, bucketError);
 
-	try {
-		await s3.send(
-			new PutObjectCommand({
-				Bucket: getBucket(),
-				Key: key,
-				Body: Buffer.from(content, "base64"),
-				ContentType:
-					typeof contentType === "string" ? contentType : "application/octet-stream",
-			}),
-		);
-		const isUpdate = request.method === "PUT";
-		response.status(isUpdate ? 200 : 201).json({
-			key,
-			message: isUpdate ? "File updated" : "File uploaded",
-		});
-	} catch (error) {
-		sendServiceError(response, error);
-	}
-};
-
-export const listFiles = async (request: Request, response: Response): Promise<void> => {
-	const prefix = getNonEmptyString(request.query.prefix);
-	if (!prefix) {
-		response.status(400).json({ error: "A non-empty prefix query parameter is required" });
-		return;
-	}
-
-	const pageSize = 10;
-	const page = request.query.page === undefined ? undefined : Number(request.query.page);
-	if (page !== undefined && (typeof request.query.page !== "string" || !Number.isSafeInteger(page) || page < 1)) {
-		response.status(400).json({ error: "page must be a positive integer" });
-		return;
-	}
-	const continuationToken = getNonEmptyString(request.query.continuationToken);
-	if (request.query.continuationToken !== undefined && !continuationToken) {
-		response.status(400).json({ error: "continuationToken must be a non-empty string" });
-		return;
-	}
-
-	try {
 		const objects: _Object[] = [];
 		let nextContinuationToken = continuationToken;
 
 		// Token requests retain sequential navigation support.
 		if (page === undefined) {
 			do {
-				const result = await s3.send(new ListObjectsV2Command({
-					Bucket: getBucket(),
+				const [resultError, result] = await safeHttpHandler(s3.send(new ListObjectsV2Command({
+					Bucket: bucket,
 					Prefix: prefix,
 					Delimiter: "/",
 					MaxKeys: pageSize - objects.length,
 					ContinuationToken: nextContinuationToken,
-				}));
+				})));
+				if (resultError) return sendServiceError(response, resultError);
 
 				objects.push(...listingEntries(result));
 				nextContinuationToken = result.IsTruncated ? result.NextContinuationToken : undefined;
@@ -105,13 +74,14 @@ export const listFiles = async (request: Request, response: Response): Promise<v
 
 		// Count immediate files and folders without retaining the entire listing.
 		do {
-			const result = await s3.send(new ListObjectsV2Command({
-				Bucket: getBucket(),
+			const [resultError, result] = await safeHttpHandler(s3.send(new ListObjectsV2Command({
+				Bucket: bucket,
 				Prefix: prefix,
 				Delimiter: "/",
 				MaxKeys: 1000,
 				ContinuationToken: countToken,
-			}));
+			})));
+			if (resultError) return sendServiceError(response, resultError);
 
 			for (const file of listingEntries(result)) {
 				if (page !== undefined && totalItems >= (page - 1) * pageSize && objects.length < pageSize) {
@@ -149,110 +119,141 @@ export const listFiles = async (request: Request, response: Response): Promise<v
 				};
 			}),
 		});
-	} catch (error) {
-		sendServiceError(response, error);
-	}
-};
-
-export const downloadFile = async (request: Request, response: Response): Promise<void> => {
-	const key = getNonEmptyString(request.query.key);
-
-	if (!key) {
-		response.status(400).json({ error: "A non-empty key query parameter is required" });
-		return;
 	}
 
-	try {
-		const result = await s3.send(
-			new GetObjectCommand({ Bucket: getBucket(), Key: key }),
-		);
+	/** GET /api/v1/files/object — Return an object as an attachment for downloads to the user’s device. */
+	async getFileDownload(request: Request, response: Response): Promise<void> {
+		const key = getNonEmptyString(request.query.key);
+
+		if (!key) {
+			response.status(400).json({ error: "A non-empty key query parameter is required" });
+			return;
+		}
+
+		const [bucketError, bucket] = await safeHttpHandler(getBucket);
+		if (bucketError) return sendServiceError(response, bucketError);
+
+		const [resultError, result] = await safeHttpHandler(s3.send(
+			new GetObjectCommand({ Bucket: bucket, Key: key }),
+		));
+		if (resultError) return sendServiceError(response, resultError);
 
 		if (!result.Body) {
 			response.status(404).json({ error: "File not found" });
 			return;
 		}
 
+		const [bodyError, body] = await safeHttpHandler(() => result.Body!.transformToByteArray());
+		if (bodyError) return sendServiceError(response, bodyError);
+
 		response.attachment(key.split("/").pop() || "download");
 		response.setHeader("Content-Type", result.ContentType ?? "application/octet-stream");
 		if (result.ContentLength !== undefined) {
 			response.setHeader("Content-Length", result.ContentLength);
 		}
-		response.send(Buffer.from(await result.Body.transformToByteArray()));
-	} catch (error) {
-		sendServiceError(response, error);
-	}
-};
-
-export const getPresignedDownloadUrl = async (
-	request: Request,
-	response: Response,
-): Promise<void> => {
-	const key = getNonEmptyString(request.query.key);
-	if (!key) {
-		response.status(400).json({ error: "A non-empty key query parameter is required" });
-		return;
+		response.send(Buffer.from(body));
 	}
 
-	try {
-		const url = await getSignedUrl(
+	/** GET /api/v1/files/presigned-url — Issue a short-lived S3 URL for previewing an object. */
+	async getPresignedDownloadUrl(
+		request: Request,
+		response: Response,
+	): Promise<void> {
+		const key = getNonEmptyString(request.query.key);
+		if (!key) {
+			response.status(400).json({ error: "A non-empty key query parameter is required" });
+			return;
+		}
+
+		const [bucketError, bucket] = await safeHttpHandler(getBucket);
+		if (bucketError) return sendServiceError(response, bucketError);
+
+		const [urlError, url] = await safeHttpHandler(getSignedUrl(
 			s3,
-			new GetObjectCommand({ Bucket: getBucket(), Key: key }),
+			new GetObjectCommand({ Bucket: bucket, Key: key }),
 			{ expiresIn: PRESIGNED_URL_EXPIRES_IN },
-		);
+		));
+		if (urlError) return sendServiceError(response, urlError);
 		response.json({ key, url, expiresIn: PRESIGNED_URL_EXPIRES_IN });
-	} catch (error) {
-		sendServiceError(response, error);
-	}
-};
-
-// S3 uses PutObject for both creation and replacement.
-export const updateFile = createFile;
-
-export const deleteFile = async (request: Request, response: Response): Promise<void> => {
-	const key = getNonEmptyString(request.query.key);
-
-	if (!key) {
-		response.status(400).json({ error: "A non-empty key query parameter is required" });
-		return;
 	}
 
-	try {
-		await s3.send(new DeleteObjectCommand({ Bucket: getBucket(), Key: key }));
-		response.status(204).send();
-	} catch (error) {
-		sendServiceError(response, error);
-	}
-};
+	/** POST /api/v1/files — Upload an object, or replace it when called by the PUT handler. */
+	async postFile(
+		request: Request<unknown, unknown, FileUploadBody>,
+		response: Response,
+	): Promise<void> {
+		const key = getNonEmptyString(request.body.key);
+		const { content, contentType } = request.body;
 
-export const renameFile = async (request: Request, response: Response): Promise<void> => {
-	const key = getNonEmptyString(request.body?.key);
-	const name = getNonEmptyString(request.body?.name)?.trim();
-	if (!key || !name || /[\\/\u0000-\u001f\u007f]/.test(name) || name === "." || name === "..") {
-		response.status(400).json({ error: "A key and a name without slashes or control characters are required" });
-		return;
-	}
-	const isDirectory = key.endsWith("/");
-	const sourceBase = isDirectory ? key.slice(0, -1) : key;
-	const parent = sourceBase.slice(0, sourceBase.lastIndexOf("/") + 1);
-	const targetBase = parent + name;
-	const newKey = targetBase + (isDirectory ? "/" : "");
-	if (Buffer.byteLength(newKey) > 1024) {
-		response.status(400).json({ error: "The new name is too long" });
-		return;
-	}
-	if (key === newKey) {
-		response.json({ key, name, isDirectory });
-		return;
+		if (!key || typeof content !== "string") {
+			response.status(400).json({ error: "key and base64-encoded content are required" });
+			return;
+		}
+
+		const validationError = validateFileUpload(key, content);
+		if (validationError) {
+			response.status(validationError.status).json({ error: validationError.error });
+			return;
+		}
+
+		const [bucketError, bucket] = await safeHttpHandler(getBucket);
+		if (bucketError) return sendServiceError(response, bucketError);
+
+		const [uploadError] = await safeHttpHandler(s3.send(
+			new PutObjectCommand({
+				Bucket: bucket,
+				Key: key,
+				Body: Buffer.from(content, "base64"),
+				ContentType:
+					typeof contentType === "string" ? contentType : "application/octet-stream",
+			}),
+		));
+		if (uploadError) return sendServiceError(response, uploadError);
+		const isUpdate = request.method === "PUT";
+		response.status(isUpdate ? 200 : 201).json({
+			key,
+			message: isUpdate ? "File updated" : "File uploaded",
+		});
 	}
 
-	let stage: "read" | "copy" | "delete" = "read";
-	try {
-		const bucket = getBucket();
+	/** POST /api/v1/files/rename — Rename a file or folder by copying its objects before deleting originals. */
+	async postFileRename(request: Request, response: Response): Promise<void> {
+		const key = getNonEmptyString(request.body?.key);
+		const name = getNonEmptyString(request.body?.name)?.trim();
+		if (!key || !name || /[\\/\u0000-\u001f\u007f]/.test(name) || name === "." || name === "..") {
+			response.status(400).json({ error: "A key and a name without slashes or control characters are required" });
+			return;
+		}
+		const isDirectory = key.endsWith("/");
+		const sourceBase = isDirectory ? key.slice(0, -1) : key;
+		const parent = sourceBase.slice(0, sourceBase.lastIndexOf("/") + 1);
+		const targetBase = parent + name;
+		const newKey = targetBase + (isDirectory ? "/" : "");
+		if (Buffer.byteLength(newKey) > 1024) {
+			response.status(400).json({ error: "The new name is too long" });
+			return;
+		}
+		if (key === newKey) {
+			response.json({ key, name, isDirectory });
+			return;
+		}
+
+		const [bucketError, bucket] = await safeHttpHandler(getBucket);
+		if (bucketError) return sendServiceError(response, bucketError);
+		const respondToReadError = (error: Error): void => {
+			if ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) {
+				response.status(404).json({ error: "File or folder not found" });
+				return;
+			}
+			sendServiceError(response, error);
+		};
+
 		const objects: _Object[] = [];
 		if (isDirectory) {
 			let token: string | undefined;
 			do {
-				const result = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: key, ContinuationToken: token }));
+				const [resultError, result] = await safeHttpHandler(s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: key, ContinuationToken: token })));
+				if (resultError) return respondToReadError(resultError);
 				objects.push(...(result.Contents ?? []).filter((object) => object.Key?.startsWith(key)));
 				token = result.IsTruncated ? result.NextContinuationToken : undefined;
 			} while (token);
@@ -261,14 +262,16 @@ export const renameFile = async (request: Request, response: Response): Promise<
 				return;
 			}
 		} else {
-			const source = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+			const [sourceError, source] = await safeHttpHandler(s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key })));
+			if (sourceError) return respondToReadError(sourceError);
 			objects.push({ Key: key, ETag: source.ETag });
 		}
 
 		// A file and directory with the same display name both count as conflicts.
 		let token: string | undefined;
 		do {
-			const result = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: targetBase, ContinuationToken: token }));
+			const [resultError, result] = await safeHttpHandler(s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: targetBase, ContinuationToken: token })));
+			if (resultError) return respondToReadError(resultError);
 			if (result.Contents?.some((object) => object.Key === targetBase || object.Key?.startsWith(`${targetBase}/`))) {
 				response.status(409).json({ error: "A file or folder with that name already exists" });
 				return;
@@ -286,33 +289,55 @@ export const renameFile = async (request: Request, response: Response): Promise<
 		}
 
 		// Preserve all originals until every destination object has been copied.
-		stage = "copy";
 		for (const { object, target } of moves) {
-			await s3.send(new CopyObjectCommand({
+			const [copyError] = await safeHttpHandler(s3.send(new CopyObjectCommand({
 				Bucket: bucket,
 				Key: target,
 				CopySource: `${bucket}/${object.Key!.split("/").map(encodeURIComponent).join("/")}`,
 				CopySourceIfMatch: object.ETag,
 				IfNoneMatch: "*",
-			}));
+			})));
+			if (copyError) {
+				console.error("S3 rename failed", copyError);
+				response.status(502).json({ error: "Rename could not finish. Original items were kept; some copies may exist under the new name." });
+				return;
+			}
 		}
-		stage = "delete";
 		for (const { object } of moves) {
-			await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: object.Key!, IfMatch: object.ETag }));
+			const [deleteError] = await safeHttpHandler(s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: object.Key!, IfMatch: object.ETag })));
+			if (deleteError) {
+				console.error("S3 rename failed", deleteError);
+				response.status(502).json({ error: "Items were copied to the new name, but some originals could not be removed. Refresh the folder to review both names." });
+				return;
+			}
 		}
 		response.json({ key: newKey, name, isDirectory });
-	} catch (error) {
-		if (stage !== "read") {
-			console.error("S3 rename failed", error);
-			response.status(502).json({
-				error: stage === "copy"
-					? "Rename could not finish. Original items were kept; some copies may exist under the new name."
-					: "Items were copied to the new name, but some originals could not be removed. Refresh the folder to review both names."
-			});
-		} else if ((error as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode === 404) {
-			response.status(404).json({ error: "File or folder not found" });
-		} else {
-			sendServiceError(response, error);
-		}
 	}
-};
+
+	/** PUT /api/v1/files — Replace an object using the same S3 PutObject operation as POST. */
+	async putFile(
+		request: Request<unknown, unknown, FileUploadBody>,
+		response: Response,
+	): Promise<void> {
+		await this.postFile(request, response);
+	}
+
+	/** DELETE /api/v1/files — Delete a single S3 object, including an empty folder marker. */
+	async deleteFile(request: Request, response: Response): Promise<void> {
+		const key = getNonEmptyString(request.query.key);
+
+		if (!key) {
+			response.status(400).json({ error: "A non-empty key query parameter is required" });
+			return;
+		}
+
+		const [bucketError, bucket] = await safeHttpHandler(getBucket);
+		if (bucketError) return sendServiceError(response, bucketError);
+
+		const [deleteError] = await safeHttpHandler(s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key })));
+		if (deleteError) return sendServiceError(response, deleteError);
+		response.status(204).send();
+	}
+}
+
+export const fileController = new FileController();

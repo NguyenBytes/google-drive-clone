@@ -1,12 +1,12 @@
-jest.mock('../dist/libs/s3.js', () => ({ s3: { send: jest.fn() }, getBucket: () => 'bucket' }));
-const { s3 } = require('../dist/libs/s3.js');
-const { renameFile } = require('../dist/controllers/file.controller.js');
+jest.mock('../src/libs/s3.ts', () => ({ s3: { send: jest.fn() }, getBucket: () => 'bucket' }));
+const { s3 } = require('../src/libs/s3.ts');
+const { fileController } = require('../src/controllers/file.controller.ts');
 
 beforeEach(() => s3.send.mockReset());
 
 async function rename(key, name) {
   const response = { status: jest.fn().mockReturnThis(), json: jest.fn() };
-  await renameFile({ body: { key, name } }, response);
+  await fileController.postFileRename({ body: { key, name } }, response);
   return response;
 }
 

@@ -2,6 +2,7 @@ import express from "express";
 import process from "node:process";
 import cors from "cors";
 import router from "./routes.js";
+import { verifyJwt } from "./middleware/verifyJwt.js";
 
 try {
 	process.loadEnvFile();
@@ -24,7 +25,7 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: "25mb" }));
-app.use("/api/v1", router);
+app.use("/api/v1", verifyJwt, router);
 
 const server = app.listen(port, () => {
 	console.log(`Server listening on port ${port}`);

@@ -5,6 +5,7 @@ import { FileActionsMenu } from '../ui/FileActionsMenu'
 import { DownloadButton } from '../ui/DownloadButton'
 import { RenameModal } from '../ui/RenameModal'
 import { FolderBreadcrumbs } from '../ui/FolderBreadcrumbs'
+import { apiFetch } from '../../utils/apiFetch'
 
 const configuredApiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 const API_URL = (/^https?:\/\//i.test(configuredApiUrl)
@@ -77,7 +78,7 @@ export function Dashboard({ auth }: DashboardProps) {
 				const filesUrl = new URL(`${API_URL}/files`)
 				filesUrl.searchParams.set('prefix', `${email}/${folderPath}`)
 				filesUrl.searchParams.set('page', String(page))
-				const response = await fetch(filesUrl, { signal: controller.signal })
+				const response = await apiFetch(filesUrl, { signal: controller.signal })
 				const result = await response.json().catch(() => null)
 
 				if (!response.ok) {
@@ -152,7 +153,7 @@ export function Dashboard({ auth }: DashboardProps) {
 		try {
 			const requestUrl = new URL(`${API_URL}/files/presigned-url`)
 			requestUrl.searchParams.set('key', file.key)
-			const response = await fetch(requestUrl, { signal: controller.signal })
+			const response = await apiFetch(requestUrl, { signal: controller.signal })
 			const result = await response.json().catch(() => null)
 			if (!response.ok) throw new Error(result?.error ?? 'Could not get a preview URL.')
 			if (typeof result?.url !== 'string') throw new Error('The server did not return a preview URL.')
@@ -190,7 +191,7 @@ export function Dashboard({ auth }: DashboardProps) {
 		try {
 			const requestUrl = new URL(`${API_URL}/files`)
 			requestUrl.searchParams.set('key', file.key)
-			const response = await fetch(requestUrl, { method: 'DELETE' })
+			const response = await apiFetch(requestUrl, { method: 'DELETE' })
 			if (!response.ok) {
 				const result = await response.json().catch(() => null)
 				throw new Error(result?.error ?? `Could not delete ${file.name}.`)
@@ -207,7 +208,7 @@ export function Dashboard({ auth }: DashboardProps) {
 	}
 
 	const renameFile = async (file: DriveFile, name: string) => {
-		const response = await fetch(`${API_URL}/files/rename`, {
+		const response = await apiFetch(`${API_URL}/files/rename`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ key: file.key, name }),
@@ -245,7 +246,7 @@ export function Dashboard({ auth }: DashboardProps) {
 				const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath
 				const relativeKey = keepFolderPaths && relativePath ? relativePath : file.name
 				const key = `${currentPrefix}${relativeKey}`
-				const response = await fetch(`${API_URL}/files`, {
+				const response = await apiFetch(`${API_URL}/files`, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
@@ -293,7 +294,7 @@ export function Dashboard({ auth }: DashboardProps) {
 
 		try {
 			const prefix = currentPrefix
-			const response = await fetch(`${API_URL}/files`, {
+			const response = await apiFetch(`${API_URL}/files`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({

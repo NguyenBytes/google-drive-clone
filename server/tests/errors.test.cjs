@@ -1,4 +1,4 @@
-const { sendServiceError } = require('../dist/utils/errors.js');
+const { sendServiceError } = require('../src/utils/errors.ts');
 
 describe('sendServiceError', () => {
   let response;

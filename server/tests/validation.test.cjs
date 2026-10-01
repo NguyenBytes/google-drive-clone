@@ -1,4 +1,4 @@
-const { getNonEmptyString, validateFileUpload } = require('../dist/utils/validation.js');
+const { getNonEmptyString, validateFileUpload } = require('../src/utils/validation.ts');
 
 describe('getNonEmptyString', () => {
   test('preserves a valid string', () => {

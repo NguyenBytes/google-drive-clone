@@ -1,10 +1,10 @@
-jest.mock('../dist/libs/s3.js', () => ({
+jest.mock('../src/libs/s3.ts', () => ({
   s3: { send: jest.fn() },
   getBucket: () => 'test-bucket',
 }));
 
-const { s3 } = require('../dist/libs/s3.js');
-const { listFiles } = require('../dist/controllers/file.controller.js');
+const { s3 } = require('../src/libs/s3.ts');
+const { fileController } = require('../src/controllers/file.controller.ts');
 
 const listing = {
   Contents: [
@@ -18,7 +18,7 @@ beforeEach(() => s3.send.mockReset());
 
 async function list(query) {
   const response = { json: jest.fn(), status: jest.fn().mockReturnThis() };
-  await listFiles({ query: { prefix: 'user/', ...query } }, response);
+  await fileController.getFiles({ query: { prefix: 'user/', ...query } }, response);
   expect(response.status).not.toHaveBeenCalled();
   return response.json.mock.calls[0][0];
 }
