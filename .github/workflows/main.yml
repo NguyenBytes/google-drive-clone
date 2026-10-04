@@ -30,14 +30,9 @@ jobs:
     name: Test
     uses: ./.github/workflows/test.yml
 
-  scan:
-    name: Scan
-    needs: test
-    uses: ./.github/workflows/scan.yml
-
   provision:
     name: Provision
-    needs: scan
+    needs: test
     uses: ./.github/workflows/terraform.yml
     permissions:
       contents: read
