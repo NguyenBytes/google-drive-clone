@@ -30,6 +30,12 @@ jobs:
       - name: Check Out Repository
         uses: actions/checkout@v4
 
+      - name: Set Short Commit ID
+        id: commit
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: echo "short_sha=${COMMIT_SHA:0:7}" >> "$GITHUB_OUTPUT"
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v5
         with:
@@ -59,9 +65,7 @@ jobs:
           context: ./frontend
           file: ./frontend/Dockerfile
           push: true
-          tags: |
-            ${{ inputs.frontend_repository_url }}:google-drive-clone-frontend-${{ github.sha }}
-            ${{ inputs.frontend_repository_url }}:latest
+          tags: ${{ inputs.frontend_repository_url }}:google-drive-clone-frontend-${{ steps.commit.outputs.short_sha }}
           build-args: |
             VITE_COGNITO_USER_POOL_ID=${{ inputs.cognito_user_pool_id }}
             VITE_COGNITO_APP_CLIENT_ID=${{ inputs.cognito_app_client_id }}
@@ -73,6 +77,4 @@ jobs:
           context: ./server
           file: ./server/Dockerfile
           push: true
-          tags: |
-            ${{ inputs.server_repository_url }}:google-drive-clone-backend-${{ github.sha }}
-            ${{ inputs.server_repository_url }}:latest
+          tags: ${{ inputs.server_repository_url }}:google-drive-clone-backend-${{ steps.commit.outputs.short_sha }}

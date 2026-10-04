@@ -100,7 +100,9 @@ The main GitHub Actions workflow runs Test → Scan → Provision → Build/Push
 Pull requests run tests, the unwanted-file scan, and a Terraform plan. Pushes to
 `main` also apply Terraform, then build and push frontend and server Docker images
 to the repository URLs exported from the applied Terraform state. Each image is
-tagged with the commit SHA and `latest`. Build/Push verifies that both repository
+tagged as `google-drive-clone-frontend-<commit>` or
+`google-drive-clone-backend-<commit>`, using the first 7 characters of the commit
+SHA (for example, `56bca47`). No `latest` tag is published. Build/Push verifies that both repository
 URLs belong to the authenticated ECR registry before publishing.
 
 To enable the workflow, configure an AWS IAM role that trusts GitHub Actions through OIDC and add its ARN as the repository variable `AWS_ROLE_TO_ASSUME`. Do not store long-lived AWS access keys in the repository.
