@@ -7,14 +7,16 @@ on:
     paths:
       - "terraform/**"
       - "server/**"
-      - ".github/workflows/**"
+      - "frontend/**"
+      - ".github/**"
   push:
     branches:
       - main
     paths:
       - "terraform/**"
       - "server/**"
-      - ".github/workflows/**"
+      - "frontend/**"
+      - ".github/**"
 
 permissions:
   contents: read
@@ -28,10 +30,30 @@ jobs:
     name: Test
     uses: ./.github/workflows/test.yml
 
+  scan:
+    name: Scan
+    needs: test
+    uses: ./.github/workflows/scan.yml
+
   provision:
     name: Provision
-    needs: test
+    needs: scan
     uses: ./.github/workflows/terraform.yml
     permissions:
       contents: read
       id-token: write
+
+  build-push:
+    name: Build/Push
+    needs: provision
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/build-push.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      frontend_repository_url: ${{ needs.provision.outputs.frontend_repository_url }}
+      server_repository_url: ${{ needs.provision.outputs.server_repository_url }}
+      cognito_user_pool_id: ${{ needs.provision.outputs.cognito_user_pool_id }}
+      cognito_app_client_id: ${{ needs.provision.outputs.cognito_app_client_id }}
+      aws_region: ${{ needs.provision.outputs.aws_region }}

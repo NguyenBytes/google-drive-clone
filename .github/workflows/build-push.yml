@@ -1,0 +1,78 @@
+name: Build/Push
+
+on:
+  workflow_call:
+    inputs:
+      frontend_repository_url:
+        required: true
+        type: string
+      server_repository_url:
+        required: true
+        type: string
+      cognito_user_pool_id:
+        required: true
+        type: string
+      cognito_app_client_id:
+        required: true
+        type: string
+      aws_region:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Out Repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Log In to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Validate Provisioned Repository URLs
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          FRONTEND_URL: ${{ inputs.frontend_repository_url }}
+          SERVER_URL: ${{ inputs.server_repository_url }}
+        run: |
+          set -euo pipefail
+          test "$FRONTEND_URL" = "$REGISTRY/google-drive-clone/frontend"
+          test "$SERVER_URL" = "$REGISTRY/google-drive-clone/server"
+
+      - name: Set Up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ inputs.frontend_repository_url }}:${{ github.sha }}
+            ${{ inputs.frontend_repository_url }}:latest
+          build-args: |
+            VITE_COGNITO_USER_POOL_ID=${{ inputs.cognito_user_pool_id }}
+            VITE_COGNITO_APP_CLIENT_ID=${{ inputs.cognito_app_client_id }}
+            VITE_API_URL=${{ vars.VITE_API_URL || 'http://localhost:3000/api/v1' }}
+
+      - name: Build and Push Server
+        uses: docker/build-push-action@v6
+        with:
+          context: ./server
+          file: ./server/Dockerfile
+          push: true
+          tags: |
+            ${{ inputs.server_repository_url }}:${{ github.sha }}
+            ${{ inputs.server_repository_url }}:latest

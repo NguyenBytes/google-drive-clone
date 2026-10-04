@@ -96,9 +96,19 @@ terraform init -input=false
 terraform plan
 ```
 
-GitHub Actions runs an AWS identity check, initialization, formatting, validation, and a plan on pull requests. A push to `main` runs the same checks and then applies the approved configuration.
+The main GitHub Actions workflow runs Test → Scan → Provision → Build/Push.
+Pull requests run tests, the unwanted-file scan, and a Terraform plan. Pushes to
+`main` also apply Terraform, then build and push frontend and server Docker images
+to the repository URLs exported from the applied Terraform state. Each image is
+tagged with the commit SHA and `latest`. Build/Push verifies that both repository
+URLs belong to the authenticated ECR registry before publishing.
 
 To enable the workflow, configure an AWS IAM role that trusts GitHub Actions through OIDC and add its ARN as the repository variable `AWS_ROLE_TO_ASSUME`. Do not store long-lived AWS access keys in the repository.
+Apply the permissions in `github-actions-iam-role.json` to that role, including
+ECR authentication and image-push permissions. Set the repository variable
+`VITE_API_URL` to the deployed API URL, including `/api/v1`; the frontend build
+otherwise uses the local development API URL. Cognito pool and app-client IDs
+are passed from Terraform outputs into the frontend image build.
 
 ## Cost note
 

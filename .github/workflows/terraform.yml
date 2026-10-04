@@ -2,6 +2,22 @@ name: Provision AWS Infrastructure
 
 on:
   workflow_call:
+    outputs:
+      frontend_repository_url:
+        description: Frontend ECR repository URL from applied Terraform state.
+        value: ${{ jobs.provision.outputs.frontend_repository_url }}
+      server_repository_url:
+        description: Server ECR repository URL from applied Terraform state.
+        value: ${{ jobs.provision.outputs.server_repository_url }}
+      cognito_user_pool_id:
+        description: Cognito user pool for the frontend build.
+        value: ${{ jobs.provision.outputs.cognito_user_pool_id }}
+      cognito_app_client_id:
+        description: Cognito app client for the frontend build.
+        value: ${{ jobs.provision.outputs.cognito_app_client_id }}
+      aws_region:
+        description: AWS region used by provisioning.
+        value: ${{ jobs.provision.outputs.aws_region }}
 
 permissions:
   contents: read
@@ -13,6 +29,12 @@ env:
 
 jobs:
   provision:
+    outputs:
+      frontend_repository_url: ${{ steps.outputs.outputs.frontend_repository_url }}
+      server_repository_url: ${{ steps.outputs.outputs.server_repository_url }}
+      cognito_user_pool_id: ${{ steps.outputs.outputs.cognito_user_pool_id }}
+      cognito_app_client_id: ${{ steps.outputs.outputs.cognito_app_client_id }}
+      aws_region: ${{ steps.outputs.outputs.aws_region }}
     permissions:
       contents: read
       id-token: write
@@ -26,6 +48,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.16.1
+          terraform_wrapper: false
 
       - name: Display AWS Role To Assume
         run: 'echo "AWS role to assume: ${{ vars.AWS_ROLE_TO_ASSUME }}"'
@@ -65,3 +88,23 @@ jobs:
         if: github.event_name == 'push'
         working-directory: terraform
         run: terraform apply -input=false -no-color tfplan
+
+      - name: Export Applied Infrastructure Outputs
+        id: outputs
+        if: github.event_name == 'push'
+        working-directory: terraform
+        shell: bash
+        run: |
+          set -euo pipefail
+          repository_urls=$(terraform output -json ecr_repository_urls)
+          frontend_url=$(jq -er '.frontend | select(type == "string" and length > 0)' <<< "$repository_urls")
+          server_url=$(jq -er '.server | select(type == "string" and length > 0)' <<< "$repository_urls")
+          user_pool_id=$(terraform output -raw cognito_user_pool_id)
+          client_id=$(terraform output -raw cognito_web_client_id)
+          test -n "$user_pool_id"
+          test -n "$client_id"
+          echo "frontend_repository_url=$frontend_url" >> "$GITHUB_OUTPUT"
+          echo "server_repository_url=$server_url" >> "$GITHUB_OUTPUT"
+          echo "cognito_user_pool_id=$user_pool_id" >> "$GITHUB_OUTPUT"
+          echo "cognito_app_client_id=$client_id" >> "$GITHUB_OUTPUT"
+          echo "aws_region=$AWS_REGION" >> "$GITHUB_OUTPUT"
