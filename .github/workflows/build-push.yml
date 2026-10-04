@@ -60,7 +60,7 @@ jobs:
           file: ./frontend/Dockerfile
           push: true
           tags: |
-            ${{ inputs.frontend_repository_url }}:${{ github.sha }}
+            ${{ inputs.frontend_repository_url }}:google-drive-clone-frontend-${{ github.sha }}
             ${{ inputs.frontend_repository_url }}:latest
           build-args: |
             VITE_COGNITO_USER_POOL_ID=${{ inputs.cognito_user_pool_id }}
@@ -74,5 +74,5 @@ jobs:
           file: ./server/Dockerfile
           push: true
           tags: |
-            ${{ inputs.server_repository_url }}:${{ github.sha }}
+            ${{ inputs.server_repository_url }}:google-drive-clone-backend-${{ github.sha }}
             ${{ inputs.server_repository_url }}:latest
