@@ -50,12 +50,12 @@ resource "aws_cognito_user_group" "users" {
 }
 
 data "aws_ssm_parameter" "google_client_id" {
-  name            = "google-drive-clone/google/client-id"
+  name            = "/google-drive-clone/google/client-id"
   with_decryption = true
 }
 
 data "aws_ssm_parameter" "google_client_secret" {
-  name            = "google-drive-clone/google/client-secret"
+  name            = "/google-drive-clone/google/client-secret"
   with_decryption = true
 }
 
@@ -111,5 +111,5 @@ output "cognito_web_client_id" {
 
 output "cognito_domain" {
   description = "Cognito domain hostname for VITE_COGNITO_DOMAIN."
-  value       = "${aws_cognito_user_pool_domain.main.domain}.auth.${data.aws_region.current.name}.amazoncognito.com"
+  value       = "${aws_cognito_user_pool_domain.main.domain}.auth.${data.aws_region.current.region}.amazoncognito.com"
 }
