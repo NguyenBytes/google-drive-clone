@@ -33,6 +33,14 @@ resource "aws_cognito_user_pool" "main" {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
+# Include the AWS account ID to avoid collisions with other projects' domains.
+resource "aws_cognito_user_pool_domain" "main" {
+  domain       = "google-drive-clone-${data.aws_caller_identity.current.account_id}"
+  user_pool_id = aws_cognito_user_pool.main.id
+}
+
 #random cmment to set
 resource "aws_cognito_user_group" "users" {
   name         = "users"
@@ -66,4 +74,9 @@ output "cognito_user_pool_id" {
 output "cognito_web_client_id" {
   description = "Public Cognito app-client ID for the Amplify frontend configuration."
   value       = aws_cognito_user_pool_client.web.id
+}
+
+output "cognito_domain" {
+  description = "Cognito domain hostname for VITE_COGNITO_DOMAIN."
+  value       = "${aws_cognito_user_pool_domain.main.domain}.auth.${data.aws_region.current.name}.amazoncognito.com"
 }
