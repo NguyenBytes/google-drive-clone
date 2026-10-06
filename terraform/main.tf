@@ -49,13 +49,46 @@ resource "aws_cognito_user_group" "users" {
   precedence   = 1
 }
 
-# Public browser client for Amplify's native username/password authentication.
+data "aws_ssm_parameter" "google_client_id" {
+  name            = "google-drive-clone/google/client-id"
+  with_decryption = true
+}
+
+data "aws_ssm_parameter" "google_client_secret" {
+  name            = "google-drive-clone/google/client-secret"
+  with_decryption = true
+}
+
+resource "aws_cognito_identity_provider" "google" {
+  user_pool_id  = aws_cognito_user_pool.main.id
+  provider_name = "Google"
+  provider_type = "Google"
+
+  provider_details = {
+    client_id        = data.aws_ssm_parameter.google_client_id.value
+    client_secret    = data.aws_ssm_parameter.google_client_secret.value
+    authorize_scopes = "openid email profile"
+  }
+
+  attribute_mapping = {
+    email = "email"
+  }
+}
+
+# Public browser client for Amplify's password and Google authentication.
 # Browser clients must not have a client secret because it cannot be kept private.
 resource "aws_cognito_user_pool_client" "web" {
   name         = "google-drive-clone-web"
   user_pool_id = aws_cognito_user_pool.main.id
 
   generate_secret = false
+
+  supported_identity_providers         = ["COGNITO", aws_cognito_identity_provider.google.provider_name]
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows                  = ["code"]
+  allowed_oauth_scopes                 = ["openid", "email", "profile", "aws.cognito.signin.user.admin"]
+  callback_urls                        = ["http://localhost:5173/login"]
+  logout_urls                          = ["http://localhost:5173/"]
 
   explicit_auth_flows = [
     "ALLOW_REFRESH_TOKEN_AUTH",

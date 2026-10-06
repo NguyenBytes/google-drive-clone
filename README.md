@@ -90,6 +90,10 @@ npm run dev
 
 Terraform uses the separate `google-drive-clone-state` S3 bucket in `us-west-2` for remote state. It uses S3 lockfiles, so no DynamoDB lock table is needed. The state bucket must be created by a separate bootstrap process before initializing this stack.
 
+Google sign-in reads the existing SSM parameters `google-drive-clone/google/client-id` and `google-drive-clone/google/client-secret` in the deployment region. The Terraform deployment role needs `ssm:GetParameter` for both parameters and `kms:Decrypt` if they use a customer-managed KMS key. Terraform stores these values in state; restrict access to the state bucket.
+
+The Cognito browser client allows `http://localhost:5173/login` as its callback URL and `http://localhost:5173/` as its sign-out URL. These match `frontend/.env.example`. In Google's OAuth client configuration, register `https://<cognito_domain>/oauth2/idpresponse` as an authorized redirect URI, using the `cognito_domain` Terraform output. Apply the Terraform changes before testing Google sign-in.
+
 ```bash
 cd terraform
 terraform init -input=false
