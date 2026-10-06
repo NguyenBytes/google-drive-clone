@@ -1,6 +1,7 @@
 import { Link, Outlet, useNavigate } from 'react-router'
 import { signOut } from 'aws-amplify/auth'
 import type { AuthState } from '../../types'
+import { getDisplayName } from '../../types'
 import { SiteFooter } from './SiteFooter'
 
 type SiteLayoutProps = {
@@ -10,7 +11,7 @@ type SiteLayoutProps = {
 
 export function SiteLayout({ auth, setAuth }: SiteLayoutProps) {
 	const navigate = useNavigate()
-	const displayName = auth.preferredUsername || auth.username
+	const displayName = getDisplayName(auth)
 
 	const logout = async () => {
 		await signOut()

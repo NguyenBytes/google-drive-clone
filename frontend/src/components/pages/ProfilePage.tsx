@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { deleteUserAttributes, fetchUserAttributes, updateUserAttributes } from 'aws-amplify/auth'
 import type { AuthState } from '../../types'
+import { getAccountName } from '../../types'
 
 const messageFor = (error: unknown) =>
 	error instanceof Error ? error.message : 'Something went wrong. Please try again.'
@@ -18,6 +19,7 @@ export function ProfilePage({ auth, setAuth }: ProfilePageProps) {
 	const [notice, setNotice] = useState('')
 	const [error, setError] = useState('')
 	const [busy, setBusy] = useState(true)
+	const accountName = getAccountName(auth)
 
 	useEffect(() => {
 		const loadProfile = async () => {
@@ -61,6 +63,12 @@ export function ProfilePage({ auth, setAuth }: ProfilePageProps) {
 
 			const result = await updateUserAttributes({ userAttributes: { email } })
 			const nextStep = result.email?.nextStep.updateAttributeStep
+			const attributes = await fetchUserAttributes()
+			setAuth({
+				...auth,
+				email: attributes.email?.trim() || null,
+				preferredUsername: attributes.preferred_username?.trim() || null,
+			})
 			setNotice(
 				nextStep === 'CONFIRM_ATTRIBUTE_WITH_CODE'
 					? 'Check your new email for a verification code.'
@@ -90,7 +98,7 @@ export function ProfilePage({ auth, setAuth }: ProfilePageProps) {
 
 					<label className="fieldset">
 						<span className="fieldset-label">Username</span>
-						<input className="input input-bordered w-full" disabled value={auth.username ?? ''} />
+						<input className="input input-bordered w-full" disabled value={accountName ?? ''} />
 					</label>
 
 					<label className="fieldset">
@@ -100,12 +108,12 @@ export function ProfilePage({ auth, setAuth }: ProfilePageProps) {
 							autoComplete="nickname"
 							disabled={busy}
 							onChange={(event) => setPreferredUsername(event.target.value)}
-							placeholder={auth.username ?? ''}
+							placeholder={accountName ?? ''}
 							type="text"
 							value={preferredUsername}
 						/>
 						<span className="text-xs text-base-content/60">
-							Shown throughout Drivebox. Leave blank to use your username.
+							Shown throughout Drivebox. Leave blank to use your Google email or account username.
 						</span>
 					</label>
 

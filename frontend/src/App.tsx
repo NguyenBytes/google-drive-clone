@@ -37,6 +37,7 @@ function App() {
 			setAuth({
 				status: 'signedIn',
 				username: user.username,
+				email: attributes?.email?.trim() || null,
 				preferredUsername: attributes?.preferred_username?.trim() || null,
 			})
 		} catch {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchUserAttributes } from 'aws-amplify/auth'
 import type { DriveFile, AuthState } from '../../types'
+import { getDisplayName } from '../../types'
 import { FileActionsMenu } from '../ui/FileActionsMenu'
 import { DownloadButton } from '../ui/DownloadButton'
 import { RenameModal } from '../ui/RenameModal'
@@ -346,7 +347,7 @@ export function Dashboard({ auth }: DashboardProps) {
 			/>
 
 			<div className="mx-auto w-full min-w-0 max-w-full flex-1 p-4 md:w-2/3 md:p-6 xl:w-2/3">
-				<DashboardHeader username={auth.preferredUsername || auth.username} />
+				<DashboardHeader username={getDisplayName(auth)} />
 				<div className="mb-4 flex items-center gap-1 sm:gap-3">
 					<FolderBreadcrumbs
 						prefix={currentPrefix}
