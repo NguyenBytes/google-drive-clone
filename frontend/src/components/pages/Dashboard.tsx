@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { fetchUserAttributes } from 'aws-amplify/auth'
+import { getCurrentUser } from 'aws-amplify/auth'
 import type { DriveFile, AuthState } from '../../types'
 import { getDisplayName } from '../../types'
 import { FileActionsMenu } from '../ui/FileActionsMenu'
@@ -40,9 +40,9 @@ export function Dashboard({ auth }: DashboardProps) {
 	const deleteInProgress = useRef(false)
 	const [uploading, setUploading] = useState(false)
 	const [files, setFiles] = useState<DriveFile[]>([])
-	const [userEmail, setUserEmail] = useState<string | null>(null)
+	const [userId, setUserId] = useState<string | null>(null)
 	const [folderPath, setFolderPath] = useState('')
-	const rootPrefix = userEmail ? `${userEmail}/` : ''
+	const rootPrefix = userId ? `${userId}/` : ''
 	const currentPrefix = rootPrefix + folderPath
 	const [loadingFiles, setLoadingFiles] = useState(true)
 	const [filesError, setFilesError] = useState('')
@@ -71,13 +71,13 @@ export function Dashboard({ auth }: DashboardProps) {
 			setFiles([])
 
 			try {
-				const attributes = await fetchUserAttributes()
-				const email = attributes.email?.trim()
-				if (!email) throw new Error('Could not find an email address for this account.')
-				if (!cancelled) setUserEmail(email)
+				const user = await getCurrentUser()
+				const accountId = user.userId
+				if (!accountId) throw new Error('Could not find a user ID for this account.')
+				if (!cancelled) setUserId(accountId)
 
 				const filesUrl = new URL(`${API_URL}/files`)
-				filesUrl.searchParams.set('prefix', `${email}/${folderPath}`)
+				filesUrl.searchParams.set('prefix', `${accountId}/${folderPath}`)
 				filesUrl.searchParams.set('page', String(page))
 				const response = await apiFetch(filesUrl, { signal: controller.signal })
 				const result = await response.json().catch(() => null)
@@ -223,8 +223,8 @@ export function Dashboard({ auth }: DashboardProps) {
 
 	const uploadFiles = async (selectedFiles: FileList | null, keepFolderPaths = false) => {
 		if (!selectedFiles?.length) return
-		if (!userEmail) {
-			setUploadError('Your account email is still loading. Please try again.')
+		if (!userId) {
+			setUploadError('Your account is still loading. Please try again.')
 			return
 		}
 
@@ -284,8 +284,8 @@ export function Dashboard({ auth }: DashboardProps) {
 			setFolderModalError('Enter a folder name without slashes.')
 			return
 		}
-		if (!userEmail) {
-			setFolderModalError('Your account email is still loading. Please try again.')
+		if (!userId) {
+			setFolderModalError('Your account is still loading. Please try again.')
 			return
 		}
 
