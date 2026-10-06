@@ -13,6 +13,7 @@ import { HomePage } from './components/pages/HomePage'
 import { LoginPage } from './components/pages/LoginPage'
 import { SignupPage } from './components/pages/SignupPage'
 import { ProfilePage } from './components/pages/ProfilePage'
+import { LegalPage } from './components/pages/LegalPage'
 import { ProtectedRoute } from './components/ui/ProtectedRoute'
 import { SiteLayout } from './components/ui/SiteLayout'
 import type { AuthState } from './types'
@@ -58,6 +59,8 @@ function App() {
 			<Routes>
 				<Route element={<SiteLayout auth={auth} setAuth={setAuth} />}>
 					<Route index element={<HomePage auth={auth} />} />
+					<Route path="privacy" element={<LegalPage policy="privacy" />} />
+					<Route path="terms" element={<LegalPage policy="terms" />} />
 					<Route
 						path="login"
 						element={<LoginPage auth={auth} refreshAuth={refreshAuth} />}
