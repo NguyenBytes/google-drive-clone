@@ -92,6 +92,8 @@ Terraform uses the separate `google-drive-clone-state` S3 bucket in `us-west-2` 
 
 Google sign-in reads the existing SSM parameters `/google-drive-clone/google/client-id` and `/google-drive-clone/google/client-secret` in the deployment region. The Terraform deployment role needs `ssm:GetParameter` for both parameters and `kms:Decrypt` if they use a customer-managed KMS key. Terraform stores these values in state; restrict access to the state bucket.
 
+Terraform provisions a pre-sign-up Lambda that links new Google identities to a single enabled, confirmed local account with the same verified email. Google must supply a verified email too. Both login methods then use the local account's Cognito user ID and S3 prefix. Apply these Terraform changes before signing in with Google. Existing standalone Google profiles require separate handling; the trigger never deletes users or moves files. The deployment role needs permissions to manage the Lambda, its IAM role and policies (including `iam:PassRole`), its CloudWatch log group, and the Cognito trigger. Run linking tests with `python3 -m unittest discover -s terraform/lambda -p 'test_*.py'`.
+
 The Cognito browser client allows `http://localhost:5173/login` as its callback URL and `http://localhost:5173/` as its sign-out URL. These match `frontend/.env.example`. In Google's OAuth client configuration, register `https://<cognito_domain>/oauth2/idpresponse` as an authorized redirect URI, using the `cognito_domain` Terraform output. Apply the Terraform changes before testing Google sign-in.
 
 ```bash

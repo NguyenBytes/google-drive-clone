@@ -44,6 +44,9 @@ jobs:
       - name: Check Out Repository
         uses: actions/checkout@v4
 
+      - name: Test Google Account Linking
+        run: python3 -m unittest discover -s terraform/lambda -p 'test_*.py'
+
       - name: Set Up Terraform
         uses: hashicorp/setup-terraform@v3
         with:

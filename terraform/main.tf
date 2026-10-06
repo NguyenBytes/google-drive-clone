@@ -28,6 +28,10 @@ resource "aws_cognito_user_pool" "main" {
   # Cognito sends a confirmation code to the email supplied at sign-up.
   auto_verified_attributes = ["email"]
 
+  lambda_config {
+    pre_sign_up = aws_lambda_function.link_google_account.arn
+  }
+
   tags = {
     Name = "google-drive-clone-users"
   }
@@ -71,7 +75,8 @@ resource "aws_cognito_identity_provider" "google" {
   }
 
   attribute_mapping = {
-    email = "email"
+    email          = "email"
+    email_verified = "email_verified"
   }
 }
 

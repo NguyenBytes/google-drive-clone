@@ -7,6 +7,8 @@
 .cache/
 .parcel-cache/
 .vite/
+__pycache__/
+*.pyc
 
 # Environment files and local secrets. Keep documented templates in Git.
 .env

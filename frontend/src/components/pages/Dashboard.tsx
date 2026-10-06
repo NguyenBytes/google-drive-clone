@@ -58,8 +58,18 @@ export function Dashboard({ auth }: DashboardProps) {
 	const [folderModalOpen, setFolderModalOpen] = useState(false)
 	const filePicker = useRef<HTMLInputElement>(null)
 	const folderPicker = useRef<HTMLInputElement>(null)
+	const newMenu = useRef<HTMLDetailsElement>(null)
 	const previewRequest = useRef<AbortController | null>(null)
 	const presignedUrlCache = useRef(new Map<string, { url: string; expiresAt: number }>())
+
+	useEffect(() => {
+		if (!uploadMessage && !uploadError) return
+		const timeout = window.setTimeout(() => {
+			setUploadMessage('')
+			setUploadError('')
+		}, 5000)
+		return () => window.clearTimeout(timeout)
+	}, [uploadMessage, uploadError])
 
 	useEffect(() => {
 		let cancelled = false
@@ -266,6 +276,7 @@ export function Dashboard({ auth }: DashboardProps) {
 			setUploadMessage(
 				`${selectedFiles.length} ${selectedFiles.length === 1 ? 'file' : 'files'} uploaded.`,
 			)
+			if (newMenu.current) newMenu.current.open = false
 			refreshFiles()
 		} catch (error) {
 			setUploadError(error instanceof Error ? error.message : 'Upload failed. Please try again.')
@@ -355,6 +366,7 @@ export function Dashboard({ auth }: DashboardProps) {
 						onNavigate={navigateToFolder}
 					/>
 					<FileFilters
+						newMenu={newMenu}
 						filePicker={filePicker}
 						folderPicker={folderPicker}
 						openFolderModal={() => {
@@ -383,6 +395,8 @@ export function Dashboard({ auth }: DashboardProps) {
 					isUploading={uploading}
 					message={uploadMessage}
 					error={uploadError}
+					onDismissMessage={() => setUploadMessage('')}
+					onDismissError={() => setUploadError('')}
 				/>
 			</div>
 
@@ -452,10 +466,12 @@ function DashboardHeader({
 }
 
 function FileFilters({
+	newMenu,
 	filePicker,
 	folderPicker,
 	openFolderModal,
 }: {
+	newMenu: React.RefObject<HTMLDetailsElement | null>
 	filePicker: React.RefObject<HTMLInputElement | null>
 	folderPicker: React.RefObject<HTMLInputElement | null>
 	openFolderModal: () => void
@@ -465,7 +481,7 @@ function FileFilters({
 			<button className="btn btn-xs sm:btn-sm shrink-0 rounded-full" type="button">Type <span aria-hidden="true" className="opacity-50">⌄</span></button>
 			<button className="btn btn-xs sm:btn-sm shrink-0 rounded-full" type="button">People <span aria-hidden="true" className="opacity-50">⌄</span></button>
 			<button className="btn btn-xs sm:btn-sm shrink-0 rounded-full" type="button">Modified <span aria-hidden="true" className="opacity-50">⌄</span></button>
-			<details className="dropdown dropdown-end ml-auto">
+			<details ref={newMenu} className="dropdown dropdown-end ml-auto">
 				<summary className="btn btn-primary btn-xs sm:btn-sm shrink-0 gap-1 sm:gap-2">
 					<span aria-hidden="true">＋</span>
 					New
@@ -784,22 +800,38 @@ function UploadStatus({
 	isUploading,
 	message,
 	error,
+	onDismissMessage,
+	onDismissError,
 }: {
 	isUploading: boolean
 	message: string
 	error: string
+	onDismissMessage: () => void
+	onDismissError: () => void
 }) {
+	if (!isUploading && !message && !error) return null
+
 	return (
-		<>
+		<div className="fixed bottom-4 right-4 z-50 flex w-[calc(100%-2rem)] max-w-sm flex-col gap-3 sm:bottom-6 md:right-[calc(16.666667%+1.5rem)]">
 			{isUploading && (
-				<div className="mt-6 alert bg-base-100 shadow-sm" role="status">
+				<div className="alert bg-base-100 shadow-lg" role="status">
 					<span className="loading loading-spinner loading-sm" />
 					Uploading files…
 				</div>
 			)}
-			{message && <div className="mt-6 alert alert-success" role="status">{message}</div>}
-			{error && <div className="mt-6 alert alert-error" role="alert">{error}</div>}
-		</>
+			{message && (
+				<div className="alert alert-success flex justify-between shadow-lg" role="status">
+					<span className="min-w-0 break-words">{message}</span>
+					<button className="btn btn-ghost btn-circle shrink-0 text-3xl" type="button" aria-label="Dismiss upload notification" onClick={onDismissMessage}>×</button>
+				</div>
+			)}
+			{error && (
+				<div className="alert alert-error flex justify-between shadow-lg" role="alert">
+					<span className="min-w-0 break-words">{error}</span>
+					<button className="btn btn-ghost btn-circle shrink-0 text-3xl" type="button" aria-label="Dismiss upload error" onClick={onDismissError}>×</button>
+				</div>
+			)}
+		</div>
 	)
 }
 
